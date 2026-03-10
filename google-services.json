@@ -1,0 +1,63 @@
+{
+  "project_info": {
+    "project_number": "666766674716",
+    "firebase_url": "https://green-suitcase-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "green-suitcase",
+    "storage_bucket": "green-suitcase.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:666766674716:android:fb0e0e942fa4d8017fc8d9",
+        "android_client_info": {
+          "package_name": "greensuitcase.com"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "666766674716-2pijifa9usjmktvtr85br55uu0d02heb.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "greensuitcase.com",
+            "certificate_hash": "3151a7b68d4e7c4cfb84abd0dd9582219ac8c5f0"
+          }
+        },
+        {
+          "client_id": "666766674716-aa6qee5221ffuo8ss1f456hina6uisdq.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "greensuitcase.com",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "666766674716-o24pjinv3dmk8n7sf0rhfe9r4rsbtprt.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAgYFJS60ZmSmhCUaKhR7xzFkcIWtey1cM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "666766674716-o24pjinv3dmk8n7sf0rhfe9r4rsbtprt.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "666766674716-bkn35ddvurr5kj42637e6k3a7c8niima.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "Green-suitcase"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
