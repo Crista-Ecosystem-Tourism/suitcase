@@ -5,6 +5,16 @@ set -e
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_DIR"
 
+if [ ! -d "node_modules" ]; then
+    echo "📦 Установка зависимостей (node_modules не найден)..."
+    npm install --legacy-peer-deps
+fi
+
+if [ ! -d "node_modules/expo" ]; then
+    echo "📦 Пакет expo не найден. Устанавливаю..."
+    npm install expo --legacy-peer-deps
+fi
+
 # Удаление дубликатов папок от iCloud (фикс проблемы с ".expo 2")
 rm -rf ".expo 2" "node_modules 2" || true
 

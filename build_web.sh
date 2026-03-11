@@ -9,6 +9,16 @@ set -e
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_DIR"
 
+if [ ! -d "node_modules" ]; then
+    echo "📦 Установка зависимостей (node_modules не найден)..."
+    npm install --legacy-peer-deps
+fi
+
+if [ ! -d "node_modules/expo" ]; then
+    echo "📦 Пакет expo не найден. Устанавливаю..."
+    npm install expo --legacy-peer-deps
+fi
+
 echo "🌐 Деплой веб-версии Green Suitcase на Firebase Hosting"
 echo "========================================================="
 
