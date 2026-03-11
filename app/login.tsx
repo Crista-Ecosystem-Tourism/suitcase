@@ -25,6 +25,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 GoogleSignin.configure({
     webClientId: '666766674716-o24pjinv3dmk8n7sf0rhfe9r4rsbtprt.apps.googleusercontent.com',
+    iosClientId: '666766674716-bkn35ddvurr5kj42637e6k3a7c8niima.apps.googleusercontent.com',
 });
 
 export default function LoginScreen() {
@@ -59,7 +60,9 @@ export default function LoginScreen() {
 
     const signInWithGoogle = async () => {
         try {
-            await GoogleSignin.hasPlayServices();
+            if (Platform.OS === 'android') {
+                await GoogleSignin.hasPlayServices();
+            }
             const { data } = await GoogleSignin.signIn();
 
             if (data?.idToken) {

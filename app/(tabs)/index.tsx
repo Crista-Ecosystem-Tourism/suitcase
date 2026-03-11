@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
     View,
     Text,
@@ -7,38 +7,56 @@ import {
     TouchableOpacity,
     FlatList,
     RefreshControl,
-    Alert,
-    Dimensions
+    ImageBackground,
+    Animated,
+    Dimensions,
+    Image,
 } from 'react-native';
-import MapView from 'react-native-maps';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { getAllTrips, Trip } from '../../services/trips';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { auth } from '../../services/firebase';
 import { useLanguage } from '../../hooks/useLanguage';
 import { useTheme } from '../../hooks/useTheme';
+import * as Location from 'expo-location';
 
-const getMoodColor = (mood?: string) => {
-    switch (mood) {
-        case 'excited': return '#FF9500';
-        case 'relaxed': return '#34C759';
-        case 'peaceful': return '#007AFF';
-        case 'tired': return '#8E8E93';
-        default: return '#007AFF';
-    }
-};
+const { width } = Dimensions.get('window');
+
+interface TripWithCoords extends Trip {
+    lat?: number;
+    lng?: number;
+}
 
 export default function HomeScreen() {
     const { colors, isDark } = useTheme();
     const { t } = useLanguage();
-    const [trips, setTrips] = useState<Trip[]>([]);
+    const [trips, setTrips] = useState<TripWithCoords[]>([]);
     const [refreshing, setRefreshing] = useState(false);
+    const [selectedMapTrip, setSelectedMapTrip] = useState<TripWithCoords | null>(null);
+    const popupAnim = useRef(new Animated.Value(0)).current;
+
+    const geocodeAndSet = async (tripList: Trip[]) => {
+        const active = tripList.filter(t => !t.isArchived);
+        const results: TripWithCoords[] = [];
+        for (const trip of active) {
+            try {
+                const geo = await Location.geocodeAsync(`${trip.city}, ${trip.country}`);
+                if (geo.length > 0) {
+                    results.push({ ...trip, lat: geo[0].latitude, lng: geo[0].longitude });
+                    continue;
+                }
+            } catch { /* skip geocoding error */ }
+            results.push(trip);
+        }
+        setTrips(results);
+    };
 
     const fetchTrips = async () => {
         if (!auth.currentUser) return;
         try {
             const data = await getAllTrips();
-            setTrips(data);
+            await geocodeAndSet(data);
         } catch (error) {
             console.error('Fetch trips error:', error);
         }
@@ -56,10 +74,153 @@ export default function HomeScreen() {
         setRefreshing(false);
     };
 
+    const showMapPopup = (trip: TripWithCoords) => {
+        setSelectedMapTrip(trip);
+        Animated.spring(popupAnim, { toValue: 1, useNativeDriver: true, tension: 60, friction: 8 }).start();
+    };
+
+    const hideMapPopup = () => {
+        Animated.timing(popupAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
+            setSelectedMapTrip(null);
+        });
+    };
+
+    const activeTrips = trips.filter(t => !t.isArchived);
+    const lastTrip = activeTrips[0] ?? null;
+    const validMapTrips = activeTrips.filter(t => t.lat && t.lng);
+
+    const renderListHeader = () => (
+        <View>
+            {/* Last Trip Featured Card */}
+            {lastTrip && (
+                <View>
+                    <Text style={[styles.sectionTitle, { color: colors.text }]}>{t.home.lastTrip}</Text>
+                    <TouchableOpacity
+                        activeOpacity={0.85}
+                        onPress={() => router.push(`/trip/${lastTrip.id}`)}
+                        style={styles.featuredCard}
+                    >
+                        {lastTrip.image ? (
+                            <ImageBackground
+                                source={{ uri: lastTrip.image }}
+                                style={styles.featuredBg}
+                                imageStyle={{ borderRadius: 20 }}
+                            >
+                                <View style={styles.featuredOverlay} />
+                                <FeaturedContent trip={lastTrip} colors={colors} t={t} />
+                            </ImageBackground>
+                        ) : (
+                            <View style={[styles.featuredBg, styles.featuredNoBg, { backgroundColor: colors.card }]}>
+                                <FeaturedContent trip={lastTrip} colors={colors} t={t} />
+                            </View>
+                        )}
+                    </TouchableOpacity>
+                </View>
+            )}
+
+            {/* Trips section header */}
+            <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionTitle, { color: colors.text, marginTop: 0, marginBottom: 0 }]}>
+                    {t.home.tripsCount}
+                </Text>
+                <View style={[styles.badge, { backgroundColor: colors.success }]}>
+                    <Text style={styles.badgeText}>{activeTrips.length}</Text>
+                </View>
+            </View>
+
+            {/* Empty state */}
+            {activeTrips.length === 0 && (
+                <View style={[styles.emptyCard, { backgroundColor: colors.card }]}>
+                    <View style={[styles.emptyIconCircle, { backgroundColor: colors.success + '15' }]}>
+                        <Ionicons name="airplane" size={36} color={colors.success} />
+                    </View>
+                    <Text style={[styles.emptyTitle, { color: colors.text }]}>{t.home.noTrips}</Text>
+                    <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>{t.home.addFirstDescription}</Text>
+                    <TouchableOpacity
+                        style={[styles.emptyAddBtn, { backgroundColor: colors.success }]}
+                        onPress={() => router.push('/trip/create')}
+                    >
+                        <Text style={styles.emptyAddBtnText}>{t.home.addFirstBtn}</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+        </View>
+    );
+
+    const renderListFooter = () => (
+        <View>
+            {/* Journey Map */}
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>{t.home.journeyMap}</Text>
+            <View style={[styles.mapContainer, { backgroundColor: colors.card }]}>
+                <MapView
+                    provider={PROVIDER_GOOGLE}
+                    style={StyleSheet.absoluteFillObject}
+                    mapType="satellite"
+                    initialRegion={{
+                        latitude: 55,
+                        longitude: 37,
+                        latitudeDelta: 40,
+                        longitudeDelta: 40,
+                    }}
+                    onPress={hideMapPopup}
+                >
+                    {validMapTrips.map((trip) => (
+                        <Marker
+                            key={trip.id}
+                            coordinate={{ latitude: trip.lat!, longitude: trip.lng! }}
+                            onPress={() => showMapPopup(trip)}
+                        >
+                            <View style={[styles.markerDot, { backgroundColor: colors.success }]}>
+                                <Ionicons name="airplane" size={14} color="#FFF" />
+                            </View>
+                        </Marker>
+                    ))}
+                </MapView>
+
+                {selectedMapTrip && (
+                    <Animated.View
+                        style={[
+                            styles.mapPopup,
+                            { backgroundColor: colors.background },
+                            {
+                                transform: [{
+                                    translateY: popupAnim.interpolate({
+                                        inputRange: [0, 1],
+                                        outputRange: [80, 0],
+                                    })
+                                }],
+                                opacity: popupAnim,
+                            }
+                        ]}
+                    >
+                        <TouchableOpacity
+                            style={styles.mapPopupContent}
+                            activeOpacity={0.8}
+                            onPress={() => router.push(`/trip/${selectedMapTrip.id}`)}
+                        >
+                            <View style={[styles.mapPopupIcon, { backgroundColor: colors.card }]}>
+                                <Ionicons name="briefcase-outline" size={22} color={colors.secondaryText} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={[styles.mapPopupCountry, { color: colors.text }]}>{selectedMapTrip.country}</Text>
+                                <Text style={[styles.mapPopupCity, { color: colors.secondaryText }]} numberOfLines={1}>
+                                    {selectedMapTrip.city}
+                                </Text>
+                                <Text style={[styles.mapPopupDate, { color: colors.secondaryText }]}>{selectedMapTrip.startDate}</Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={18} color={colors.secondaryText} />
+                        </TouchableOpacity>
+                    </Animated.View>
+                )}
+            </View>
+        </View>
+    );
+
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
-            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
+            {/* App Header */}
             <View style={[styles.appHeader, { backgroundColor: colors.background }]}>
                 <View style={[styles.logoContainer, { backgroundColor: colors.card }]}>
                     <View style={[styles.iconCircle, { backgroundColor: colors.success + '20' }]}>
@@ -73,134 +234,55 @@ export default function HomeScreen() {
             </View>
 
             <FlatList
-                data={trips.filter(t => !t.isArchived)}
+                data={activeTrips}
                 keyExtractor={(item) => item.id!}
                 contentContainerStyle={styles.list}
-                refreshing={refreshing}
-                onRefresh={onRefresh}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.success} />}
                 renderItem={({ item }) => (
-                    <TripCard trip={item} onPress={() => router.push(`/trip/${item.id}`)} colors={colors} t={t} />
+                    <TripCard trip={item} onPress={() => router.push(`/trip/${item.id}`)} colors={colors} />
                 )}
-                ListHeaderComponent={
-                    <View>
-                        <View style={styles.sectionHeader}>
-                            <Text style={[styles.title, { color: colors.text }]}>{t.home.tripsCount}</Text>
-                            <View style={[styles.badge, { backgroundColor: colors.gray }]}>
-                                <Text style={[styles.badgeText, { color: colors.secondaryText }]}>{trips.filter(t => !t.isArchived).length}</Text>
-                            </View>
-                        </View>
-
-                        {trips.length > 0 ? (
-                            <View style={styles.statsContainer}>
-                                <View style={[styles.mainStats, { backgroundColor: colors.success }]}>
-                                    <View style={styles.statItem}>
-                                        <Text style={styles.statNumber}>{new Set(trips.map(t => t.country)).size}</Text>
-                                        <Text style={styles.statLabel}>{t.tripDetails.country}</Text>
-                                    </View>
-                                    <View style={styles.statDivider} />
-                                    <View style={styles.statItem}>
-                                        <Text style={styles.statNumber}>{trips.length}</Text>
-                                        <Text style={styles.statLabel}>{t.tripDetails.city}</Text>
-                                    </View>
-                                    <View style={styles.statDivider} />
-                                    <View style={styles.statItem}>
-                                        <Text style={styles.statNumber}>0 ₽</Text>
-                                        <Text style={styles.statLabel}>{t.expenseForm.amount}</Text>
-                                    </View>
-                                </View>
-
-                                <View style={styles.secondaryStatsRow}>
-                                    <View style={[styles.secondaryStatBox, { backgroundColor: colors.card }]}>
-                                        <View style={[styles.miniIcon, { backgroundColor: colors.primary + '20' }]}>
-                                            <Ionicons name="earth" size={16} color={colors.primary} />
-                                        </View>
-                                        <Text style={[styles.secStatNumber, { color: colors.text }]}>0</Text>
-                                        <Text style={[styles.secStatLabel, { color: colors.secondaryText }]}>Дней в дороге</Text>
-                                    </View>
-                                    <View style={[styles.secondaryStatBox, { backgroundColor: colors.card }]}>
-                                        <View style={[styles.miniIcon, { backgroundColor: colors.warning + '20' }]}>
-                                            <Ionicons name="trophy" size={16} color={colors.warning} />
-                                        </View>
-                                        <Text style={[styles.secStatNumber, { color: colors.text }]}>Нет данных</Text>
-                                        <Text style={[styles.secStatLabel, { color: colors.secondaryText }]}>Топ страна</Text>
-                                    </View>
-                                </View>
-                            </View>
-                        ) : (
-                            <View style={[styles.emptyCard, { backgroundColor: colors.card }]}>
-                                <View style={[styles.emptyIconCircle, { backgroundColor: colors.success + '10' }]}>
-                                    <Ionicons name="airplane" size={32} color={colors.success} />
-                                </View>
-                                <Text style={[styles.emptyTitle, { color: colors.text }]}>{t.home.noTrips}</Text>
-                                <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>{t.home.addFirstDescription}</Text>
-                                <TouchableOpacity
-                                    style={[styles.emptyAddBtn, { backgroundColor: colors.success }]}
-                                    onPress={() => router.push('/trip/add')}
-                                >
-                                    <Text style={styles.emptyAddBtnText}>+ {t.home.addFirstBtn}</Text>
-                                </TouchableOpacity>
-                            </View>
-                        )}
-
-                        <Text style={[styles.sectionTitle, { color: colors.text }]}>{t.home.journeyMap}</Text>
-                        <View style={[styles.mapContainer, { backgroundColor: colors.card }]}>
-                            <MapView
-                                style={styles.miniMap}
-                                scrollEnabled={false}
-                                zoomEnabled={false}
-                                customMapStyle={isDark ? darkMapStyle : []}
-                                initialRegion={{
-                                    latitude: 50,
-                                    longitude: 20,
-                                    latitudeDelta: 60,
-                                    longitudeDelta: 60,
-                                }}
-                            />
-                        </View>
-                    </View>
-                }
+                ListHeaderComponent={renderListHeader}
+                ListFooterComponent={renderListFooter}
             />
         </View>
     );
 }
 
-const darkMapStyle = [
-    { "elementType": "geometry", "stylers": [{ "color": "#212121" }] },
-    { "elementType": "labels.icon", "stylers": [{ "visibility": "off" }] },
-    { "elementType": "labels.text.fill", "stylers": [{ "color": "#757575" }] },
-    { "elementType": "labels.text.stroke", "stylers": [{ "color": "#212121" }] },
-    { "featureType": "administrative", "elementType": "geometry", "stylers": [{ "color": "#757575" }] },
-    { "featureType": "water", "elementType": "geometry", "stylers": [{ "color": "#000000" }] }
-];
+function FeaturedContent({ trip, colors, t }: { trip: Trip; colors: any; t: any }) {
+    return (
+        <View style={styles.featuredContent}>
+            <View style={[styles.lastBadge, { backgroundColor: colors.success }]}>
+                <Text style={styles.lastBadgeText}>✈ {t.home.lastBadge}</Text>
+            </View>
+            <View style={styles.featuredTextBlock}>
+                <Text style={styles.featuredCity}>{trip.city}</Text>
+                <Text style={styles.featuredCountry}>{trip.country}</Text>
+            </View>
+        </View>
+    );
+}
 
-
-function TripCard({ trip, onPress, colors, t }: { trip: Trip, onPress: () => void, colors: any, t: any }) {
-    const moodColor = getMoodColor(trip.mood);
-    const startDate = new Date(trip.startDate).toLocaleDateString();
-
+function TripCard({ trip, onPress, colors }: { trip: TripWithCoords; onPress: () => void; colors: any }) {
     return (
         <TouchableOpacity
-            style={[styles.card, { backgroundColor: colors.card }]}
-            activeOpacity={0.7}
+            style={[styles.tripCard, { backgroundColor: colors.card }]}
+            activeOpacity={0.75}
             onPress={onPress}
         >
-            <View style={[styles.moodIndicator, { backgroundColor: moodColor }]} />
-            <View style={styles.cardContent}>
-                <View style={styles.cardHeader}>
-                    <View style={{ flex: 1 }}>
-                        <Text style={[styles.cityText, { color: colors.text }]}>{trip.city}</Text>
-                        <Text style={[styles.countryText, { color: colors.secondaryText }]}>{trip.country}</Text>
+            <View style={styles.tripCardMain}>
+                <View style={{ flex: 1 }}>
+                    <Text style={[styles.tripCountry, { color: colors.text }]}>{trip.country}</Text>
+                    <View style={styles.tripCityRow}>
+                        <Ionicons name="location" size={12} color={colors.success} />
+                        <Text style={[styles.tripCityDate, { color: colors.secondaryText }]} numberOfLines={1}>
+                            {trip.city} • {trip.startDate}
+                        </Text>
                     </View>
-                    <View style={styles.dateBadge}>
-                        <Ionicons name="calendar-outline" size={12} color={colors.secondaryText} />
-                        <Text style={[styles.dateText, { color: colors.secondaryText }]}>{startDate}</Text>
-                    </View>
+                    {trip.mood ? (
+                        <Text style={[styles.tripMood, { color: colors.secondaryText }]}>{trip.mood}</Text>
+                    ) : null}
                 </View>
-
-                <View style={[styles.cardFooter, { borderTopColor: colors.border }]}>
-                    <Text style={[styles.detailsText, { color: colors.primary }]}>{t.home.viewDetails}</Text>
-                    <Ionicons name="arrow-forward" size={18} color={colors.primary} />
-                </View>
+                <Ionicons name="chevron-forward" size={20} color={colors.secondaryText} />
             </View>
         </TouchableOpacity>
     );
@@ -246,105 +328,87 @@ const styles = StyleSheet.create({
     },
     list: {
         paddingHorizontal: 16,
-        paddingBottom: 100,
-    },
-    sectionHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginVertical: 20,
-    },
-    title: {
-        fontSize: 28,
-        fontWeight: 'bold',
-        marginRight: 12,
-    },
-    badge: {
-        paddingHorizontal: 12,
-        paddingVertical: 4,
-        borderRadius: 12,
-    },
-    badgeText: {
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    statsContainer: {
-        marginBottom: 25,
-    },
-    mainStats: {
-        flexDirection: 'row',
-        borderRadius: 24,
-        padding: 20,
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 15,
-    },
-    statItem: {
-        flex: 1,
-        alignItems: 'center',
-    },
-    statNumber: {
-        color: '#FFFFFF',
-        fontSize: 22,
-        fontWeight: 'bold',
-    },
-    statLabel: {
-        color: 'rgba(255,255,255,0.7)',
-        fontSize: 12,
-        marginTop: 4,
-    },
-    statDivider: {
-        width: 1,
-        height: 30,
-        backgroundColor: 'rgba(255,255,255,0.2)',
-    },
-    secondaryStatsRow: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    secondaryStatBox: {
-        flex: 1,
-        borderRadius: 24,
-        padding: 16,
-    },
-    miniIcon: {
-        width: 32,
-        height: 32,
-        borderRadius: 10,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    secStatNumber: {
-        fontSize: 20,
-        fontWeight: 'bold',
-    },
-    secStatLabel: {
-        fontSize: 12,
-        marginTop: 2,
+        paddingBottom: 120,
     },
     sectionTitle: {
         fontSize: 22,
         fontWeight: 'bold',
-        marginBottom: 15,
-        marginTop: 10,
+        marginBottom: 12,
+        marginTop: 20,
     },
-    mapContainer: {
-        height: 200,
-        borderRadius: 24,
+    sectionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 28,
+        marginBottom: 12,
+        gap: 10,
+    },
+    badge: {
+        paddingHorizontal: 10,
+        paddingVertical: 3,
+        borderRadius: 10,
+    },
+    badgeText: {
+        color: '#FFF',
+        fontSize: 13,
+        fontWeight: '700',
+    },
+    featuredCard: {
+        borderRadius: 20,
         overflow: 'hidden',
-        marginBottom: 25,
+        height: 200,
+        marginBottom: 4,
     },
-    miniMap: {
+    featuredBg: {
+        flex: 1,
+        justifyContent: 'flex-end',
+    },
+    featuredNoBg: {
+        borderRadius: 20,
+    },
+    featuredOverlay: {
         ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.35)',
+        borderRadius: 20,
+    },
+    featuredContent: {
+        padding: 16,
+        gap: 8,
+    },
+    lastBadge: {
+        alignSelf: 'flex-start',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 10,
+    },
+    lastBadgeText: {
+        color: '#FFF',
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    featuredTextBlock: {
+        gap: 2,
+    },
+    featuredCity: {
+        color: '#FFF',
+        fontSize: 24,
+        fontWeight: 'bold',
+        textShadowColor: 'rgba(0,0,0,0.5)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 4,
+    },
+    featuredCountry: {
+        color: 'rgba(255,255,255,0.85)',
+        fontSize: 15,
+        textShadowColor: 'rgba(0,0,0,0.5)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 4,
     },
     emptyCard: {
         padding: 30,
-        borderRadius: 30,
+        borderRadius: 24,
         alignItems: 'center',
-        borderWidth: 1,
-        borderColor: 'rgba(0,0,0,0.05)',
-        borderStyle: 'dashed',
-        marginBottom: 25,
+        marginBottom: 8,
     },
     emptyIconCircle: {
         width: 80,
@@ -352,75 +416,111 @@ const styles = StyleSheet.create({
         borderRadius: 40,
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 20,
+        marginBottom: 16,
     },
     emptyTitle: {
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: 'bold',
         textAlign: 'center',
-        marginBottom: 10,
+        marginBottom: 8,
     },
     emptySubtitle: {
         fontSize: 14,
         textAlign: 'center',
-        marginBottom: 25,
+        marginBottom: 20,
+        lineHeight: 20,
     },
     emptyAddBtn: {
         paddingVertical: 14,
-        paddingHorizontal: 30,
-        borderRadius: 20,
+        paddingHorizontal: 28,
+        borderRadius: 16,
     },
     emptyAddBtnText: {
-        color: '#FFFFFF',
-        fontSize: 16,
+        color: '#FFF',
+        fontSize: 15,
         fontWeight: 'bold',
     },
-    card: {
+    tripCard: {
+        borderRadius: 16,
+        marginBottom: 10,
+        padding: 14,
+    },
+    tripCardMain: {
         flexDirection: 'row',
-        borderRadius: 20,
-        marginBottom: 15,
-        padding: 16,
+        alignItems: 'center',
     },
-    moodIndicator: {
-        width: 6,
-        borderRadius: 3,
-        marginRight: 12,
+    tripCountry: {
+        fontSize: 16,
+        fontWeight: '700',
+        marginBottom: 3,
     },
-    cardContent: {
+    tripCityRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 3,
+        marginBottom: 2,
+    },
+    tripCityDate: {
+        fontSize: 12,
         flex: 1,
     },
-    cityText: {
-        fontSize: 18,
-        fontWeight: 'bold',
-    },
-    countryText: {
-        fontSize: 14,
-        marginTop: 2,
-    },
-    cardHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-    },
-    dateBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        opacity: 0.8
-    },
-    dateText: {
+    tripMood: {
         fontSize: 12,
-        marginLeft: 4,
+        fontStyle: 'italic',
     },
-    cardFooter: {
+    mapContainer: {
+        height: 220,
+        borderRadius: 20,
+        overflow: 'hidden',
+        marginBottom: 8,
+    },
+    markerDot: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 3,
+        elevation: 3,
+    },
+    mapPopup: {
+        position: 'absolute',
+        bottom: 12,
+        left: 12,
+        right: 12,
+        borderRadius: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.12,
+        shadowRadius: 10,
+        elevation: 6,
+    },
+    mapPopupContent: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        marginTop: 15,
-        paddingTop: 12,
-        borderTopWidth: StyleSheet.hairlineWidth,
+        padding: 12,
+        gap: 10,
     },
-    detailsText: {
-        fontSize: 14,
-        fontWeight: '600',
+    mapPopupIcon: {
+        width: 46,
+        height: 46,
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    mapPopupCountry: {
+        fontSize: 15,
+        fontWeight: '700',
+    },
+    mapPopupCity: {
+        fontSize: 12,
+        marginTop: 1,
+    },
+    mapPopupDate: {
+        fontSize: 11,
+        marginTop: 1,
     },
 });

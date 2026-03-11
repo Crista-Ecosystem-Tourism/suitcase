@@ -91,13 +91,7 @@ export default function TabLayout() {
                     tabBarIcon: ({ color }) => <Ionicons name="person-outline" size={24} color={color} />,
                 }}
             />
-            <Tabs.Screen
-                name="archive"
-                options={{
-                    title: t.tabs.archive,
-                    tabBarIcon: ({ color }) => <Ionicons name="archive-outline" size={24} color={color} />,
-                }}
-            />
+            <Tabs.Screen name="archive" options={{ href: null }} />
             <Tabs.Screen name="goals" options={{ href: null }} />
         </Tabs>
     );

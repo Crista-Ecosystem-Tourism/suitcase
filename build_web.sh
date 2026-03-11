@@ -55,7 +55,7 @@ mkdir -p "$CURRENT_VERSION_DIR"
 # 3. Экспортируем веб-бандл через Expo
 echo "📦 Экспорт веб-бандла v${NEXT_VERSION} через Expo..."
 rm -rf dist
-pnpm expo export --platform web
+npx expo export --platform web
 
 echo "📂 Сохранение Web-версии в $CURRENT_VERSION_DIR/dist..."
 cp -R dist "$CURRENT_VERSION_DIR/dist"

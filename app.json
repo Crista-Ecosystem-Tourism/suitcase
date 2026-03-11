@@ -3,6 +3,7 @@
     "name": "green_suitcase",
     "slug": "green_suitcase",
     "scheme": "green-suitcase",
+    "jsEngine": "jsc",
     "newArchEnabled": true,
     "version": "1.0.0",
     "orientation": "portrait",
@@ -16,7 +17,15 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "Green-suitcase",
-      "googleServicesFile": "./GoogleService-Info.plist"
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "entitlements": {
+        "keychain-access-groups": [
+          "$(AppIdentifierPrefix)$(CFBundleIdentifier)"
+        ]
+      },
+      "config": {
+        "googleMapsApiKey": "AIzaSyAgYFJS60ZmSmhCUaKhR7xzFkcIWtey1cM"
+      }
     },
     "android": {
       "adaptiveIcon": {

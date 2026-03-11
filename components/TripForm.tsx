@@ -10,7 +10,7 @@ import {
     Platform,
     Dimensions,
     Image,
-    Modal
+    Modal,
 } from 'react-native';
 import { Trip } from '../services/trips';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -26,6 +26,8 @@ interface RoutePoint {
     latitude: number;
     longitude: number;
     name: string;
+    note?: string;
+    photos?: string[];
 }
 
 interface TripFormProps {
@@ -79,6 +81,10 @@ export const TripForm: React.FC<TripFormProps> = ({ initialData, onSubmit, loadi
     // Map Modal State
     const [showMapModal, setShowMapModal] = useState(false);
     const [activePointIndex, setActivePointIndex] = useState<number | null>(null);
+    const [mapMode, setMapMode] = useState<'point' | 'city'>('point');
+    const [pendingMapCoords, setPendingMapCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+    const [pendingCityName, setPendingCityName] = useState('');
+    const [pendingCountryName, setPendingCountryName] = useState('');
     const [mapRegion, setMapRegion] = useState({
         latitude: 55.751244,
         longitude: 37.618423,
@@ -168,7 +174,6 @@ export const TripForm: React.FC<TripFormProps> = ({ initialData, onSubmit, loadi
         const newPoints = routePoints.filter((_, i) => i !== index);
         setRoutePoints(newPoints);
 
-        // Clean up suggestions for this index
         const newPointSuggs = { ...pointSuggestions };
         delete newPointSuggs[index];
         setPointSuggestions(newPointSuggs);
@@ -178,7 +183,58 @@ export const TripForm: React.FC<TripFormProps> = ({ initialData, onSubmit, loadi
         setShowPointSuggestions(newShowPointSuggs);
     };
 
+    const updateRoutePointNote = (index: number, note: string) => {
+        const newPoints = [...routePoints];
+        newPoints[index] = { ...newPoints[index], note };
+        setRoutePoints(newPoints);
+    };
+
+    const addPhotoToPoint = async (index: number) => {
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            quality: 0.8,
+        });
+        if (!result.canceled) {
+            const newPoints = [...routePoints];
+            const existing = newPoints[index].photos || [];
+            newPoints[index] = { ...newPoints[index], photos: [...existing, result.assets[0].uri] };
+            setRoutePoints(newPoints);
+        }
+    };
+
+    const removePhotoFromPoint = (pointIndex: number, photoIndex: number) => {
+        const newPoints = [...routePoints];
+        const photos = [...(newPoints[pointIndex].photos || [])];
+        photos.splice(photoIndex, 1);
+        newPoints[pointIndex] = { ...newPoints[pointIndex], photos };
+        setRoutePoints(newPoints);
+    };
+
+    const openMapForCity = async () => {
+        setMapMode('city');
+        setPendingMapCoords(null);
+        setPendingCityName('');
+        setPendingCountryName('');
+
+        if (city) {
+            try {
+                const results = await Location.geocodeAsync(city);
+                if (results.length > 0) {
+                    setMapRegion({
+                        latitude: results[0].latitude,
+                        longitude: results[0].longitude,
+                        latitudeDelta: 0.5,
+                        longitudeDelta: 0.5,
+                    });
+                }
+            } catch (e) {}
+        }
+        setShowMapModal(true);
+    };
+
     const openMapForPoint = async (index: number) => {
+        setMapMode('point');
         setActivePointIndex(index);
         const point = routePoints[index];
 
@@ -208,8 +264,22 @@ export const TripForm: React.FC<TripFormProps> = ({ initialData, onSubmit, loadi
     };
 
     const handleMapPress = async (e: any) => {
-        if (activePointIndex === null) return;
         const coords = e.nativeEvent.coordinate;
+
+        if (mapMode === 'city') {
+            setPendingMapCoords(coords);
+            try {
+                const results = await Location.reverseGeocodeAsync(coords);
+                if (results.length > 0) {
+                    const place = results[0];
+                    setPendingCityName(place.city || place.subregion || place.name || '');
+                    setPendingCountryName(place.country || '');
+                }
+            } catch (e) {}
+            return;
+        }
+
+        if (activePointIndex === null) return;
         const newPoints = [...routePoints];
         newPoints[activePointIndex] = {
             ...newPoints[activePointIndex],
@@ -228,6 +298,15 @@ export const TripForm: React.FC<TripFormProps> = ({ initialData, onSubmit, loadi
         }
 
         setRoutePoints(newPoints);
+    };
+
+    const handleMapConfirm = () => {
+        if (mapMode === 'city') {
+            if (pendingCityName) setCity(pendingCityName);
+            if (pendingCountryName) setCountry(pendingCountryName);
+        }
+        setShowMapModal(false);
+        setPendingMapCoords(null);
     };
 
     const handleSubmit = () => {
@@ -293,6 +372,12 @@ export const TripForm: React.FC<TripFormProps> = ({ initialData, onSubmit, loadi
                             placeholder={t.tripDetails.city}
                             placeholderTextColor={colors.border}
                         />
+                        <TouchableOpacity
+                            onPress={openMapForCity}
+                            style={[styles.mapIconBtn, { backgroundColor: colors.primary + '10' }]}
+                        >
+                            <Ionicons name="map-outline" size={20} color={colors.primary} />
+                        </TouchableOpacity>
                     </View>
 
                     {showSuggestions && (
@@ -414,38 +499,41 @@ export const TripForm: React.FC<TripFormProps> = ({ initialData, onSubmit, loadi
                 </View>
 
                 {routePoints.map((point, index) => (
-                    <View key={index} style={styles.pointWrapper}>
-                        <View style={[styles.pointCard, { backgroundColor: colors.card }]}>
-                            <View style={[styles.pointNumber, { backgroundColor: colors.primary }]}>
-                                <Text style={styles.pointNumberText}>{index + 1}</Text>
-                            </View>
-                            <TextInput
-                                style={[styles.pointInput, { color: colors.text }]}
-                                value={point.name}
-                                onChangeText={(text) => updateRoutePoint(index, text)}
-                                placeholder={t.tripDetails.city}
-                                placeholderTextColor={colors.border}
-                            />
-                            <TouchableOpacity
-                                onPress={() => openMapForPoint(index)}
-                                style={[styles.mapIconBtn, { backgroundColor: colors.primary + '10' }]}
-                            >
-                                <Ionicons
-                                    name={point.latitude !== 0 ? "location" : "location-outline"}
-                                    size={20}
-                                    color={colors.primary}
+                    <View key={index} style={[styles.pointWrapper, { backgroundColor: colors.card, borderRadius: 20, marginBottom: 12 }]}>
+                        {/* Point header row */}
+                        <View style={styles.pointHeaderRow}>
+                            <View style={styles.pointCard}>
+                                <View style={[styles.pointNumber, { backgroundColor: colors.primary }]}>
+                                    <Text style={styles.pointNumberText}>{index + 1}</Text>
+                                </View>
+                                <TextInput
+                                    style={[styles.pointInput, { color: colors.text }]}
+                                    value={point.name}
+                                    onChangeText={(text) => updateRoutePoint(index, text)}
+                                    placeholder={t.tripDetails.city}
+                                    placeholderTextColor={colors.border}
                                 />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                onPress={() => removeRoutePoint(index)}
-                                style={styles.removeBtn}
-                            >
-                                <Ionicons name="close-circle-outline" size={24} color={colors.error} />
-                            </TouchableOpacity>
+                                <TouchableOpacity
+                                    onPress={() => openMapForPoint(index)}
+                                    style={[styles.mapIconBtn, { backgroundColor: colors.primary + '10' }]}
+                                >
+                                    <Ionicons
+                                        name={point.latitude !== 0 ? 'location' : 'location-outline'}
+                                        size={20}
+                                        color={colors.primary}
+                                    />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    onPress={() => removeRoutePoint(index)}
+                                    style={styles.removeBtn}
+                                >
+                                    <Ionicons name="trash-outline" size={20} color={colors.error} />
+                                </TouchableOpacity>
+                            </View>
                         </View>
 
                         {showPointSuggestions[index] && pointSuggestions[index] && (
-                            <View style={[styles.suggestionsBox, styles.pointSuggestions, { borderTopColor: colors.border, backgroundColor: colors.card }]}>
+                            <View style={[styles.suggestionsBox, { borderTopColor: colors.border, backgroundColor: colors.card, marginHorizontal: 0, borderRadius: 0 }]}>
                                 {pointSuggestions[index].map((s, i) => (
                                     <TouchableOpacity
                                         key={i}
@@ -457,6 +545,39 @@ export const TripForm: React.FC<TripFormProps> = ({ initialData, onSubmit, loadi
                                 ))}
                             </View>
                         )}
+
+                        {/* Note */}
+                        <View style={[styles.pointNoteRow, { borderTopColor: colors.border }]}>
+                            <TextInput
+                                style={[styles.pointNote, { color: colors.text }]}
+                                value={point.note || ''}
+                                onChangeText={(text) => updateRoutePointNote(index, text)}
+                                placeholder="Заметка..."
+                                placeholderTextColor={colors.border}
+                                multiline
+                            />
+                        </View>
+
+                        {/* Photos */}
+                        <View style={styles.pointPhotosRow}>
+                            {(point.photos || []).map((uri, pi) => (
+                                <View key={pi} style={styles.pointPhotoThumb}>
+                                    <Image source={{ uri }} style={styles.pointPhotoImg} />
+                                    <TouchableOpacity
+                                        style={styles.removePhotoCircle}
+                                        onPress={() => removePhotoFromPoint(index, pi)}
+                                    >
+                                        <Ionicons name="close-circle" size={18} color={colors.error} />
+                                    </TouchableOpacity>
+                                </View>
+                            ))}
+                            <TouchableOpacity
+                                style={[styles.addPhotoBtn, { backgroundColor: colors.primary + '15' }]}
+                                onPress={() => addPhotoToPoint(index)}
+                            >
+                                <Ionicons name="camera-outline" size={22} color={colors.primary} />
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 ))}
 
@@ -521,7 +642,13 @@ export const TripForm: React.FC<TripFormProps> = ({ initialData, onSubmit, loadi
                         initialRegion={mapRegion}
                         onPress={handleMapPress}
                     >
-                        {activePointIndex !== null && routePoints[activePointIndex].latitude !== 0 && (
+                        {mapMode === 'city' && pendingMapCoords && (
+                            <Marker
+                                coordinate={pendingMapCoords}
+                                title={pendingCityName}
+                            />
+                        )}
+                        {mapMode === 'point' && activePointIndex !== null && routePoints[activePointIndex].latitude !== 0 && (
                             <Marker
                                 coordinate={{
                                     latitude: routePoints[activePointIndex].latitude,
@@ -539,7 +666,10 @@ export const TripForm: React.FC<TripFormProps> = ({ initialData, onSubmit, loadi
                             <Ionicons name="close" size={24} color={colors.text} />
                         </TouchableOpacity>
                         <Text style={[styles.mapModalTitle, { color: colors.text }]}>
-                            {activePointIndex !== null ? (routePoints[activePointIndex].name || t.tripDetails.setPoint) : t.tripDetails.setPoint}
+                            {mapMode === 'city'
+                                ? (pendingCityName || t.tripDetails.setPoint)
+                                : (activePointIndex !== null ? (routePoints[activePointIndex].name || t.tripDetails.setPoint) : t.tripDetails.setPoint)
+                            }
                         </Text>
                     </View>
                     <View style={styles.mapModalFooter}>
@@ -548,9 +678,9 @@ export const TripForm: React.FC<TripFormProps> = ({ initialData, onSubmit, loadi
                         </Text>
                         <TouchableOpacity
                             style={[styles.doneBtn, { backgroundColor: colors.primary }]}
-                            onPress={() => setShowMapModal(false)}
+                            onPress={handleMapConfirm}
                         >
-                            <Text style={styles.doneBtnText}>{t.tripDetails.done}</Text>
+                            <Text style={styles.doneBtnText}>{t.tripDetails.confirmPoint}</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -765,6 +895,48 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         marginHorizontal: 8,
+    },
+    pointHeaderRow: {
+        padding: 12,
+    },
+    pointNoteRow: {
+        borderTopWidth: StyleSheet.hairlineWidth,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+    },
+    pointNote: {
+        fontSize: 15,
+        minHeight: 36,
+    },
+    pointPhotosRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        paddingHorizontal: 14,
+        paddingBottom: 14,
+    },
+    pointPhotoThumb: {
+        width: 64,
+        height: 64,
+        borderRadius: 10,
+        overflow: 'visible',
+    },
+    pointPhotoImg: {
+        width: 64,
+        height: 64,
+        borderRadius: 10,
+    },
+    removePhotoCircle: {
+        position: 'absolute',
+        top: -6,
+        right: -6,
+    },
+    addPhotoBtn: {
+        width: 64,
+        height: 64,
+        borderRadius: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     mapModalHeader: {
         position: 'absolute',

@@ -22,9 +22,11 @@ export const translations = {
         home: {
             appTitle: 'Green Suitcase',
             tripsCount: 'Trips',
+            lastTrip: 'Last Trip',
+            lastBadge: 'Last',
             noTrips: 'No trips yet',
             addFirstDescription: 'Add your first trip and start your journey',
-            addFirstBtn: 'Add my first',
+            addFirstBtn: '+ Add first',
             noTripsAlt: 'Tap the + button to add your first suitcase and start tracking expenses.',
             viewDetails: 'View details',
             journeyMap: 'Journey Map',
@@ -54,6 +56,7 @@ export const translations = {
             addPhoto: 'Add Cover Photo',
             mood: 'Mood',
             done: 'Done',
+            confirmPoint: 'Set point',
             tapToSet: 'Tap on map to set location',
             moods: {
                 happy: 'Happy',
@@ -153,9 +156,11 @@ export const translations = {
         home: {
             appTitle: 'Зеленый Чемодан',
             tripsCount: 'Путешествия',
+            lastTrip: 'Последнее путешествие',
+            lastBadge: 'Последнее',
             noTrips: 'У вас еще нет поездок',
             addFirstDescription: 'Добавьте первую и начните путешествие',
-            addFirstBtn: 'Добавить первую',
+            addFirstBtn: '+ Добавить первую',
             noTripsAlt: 'Нажмите кнопку +, чтобы добавить свой первый чемодан и начать отслеживать расходы.',
             viewDetails: 'Подробнее',
             journeyMap: 'Карта путешествий',
@@ -185,6 +190,7 @@ export const translations = {
             addPhoto: 'Добавить фото обложки',
             mood: 'Настроение',
             done: 'Готово',
+            confirmPoint: 'Установить точку',
             tapToSet: 'Нажмите на карту, чтобы выбрать место',
             moods: {
                 happy: 'Счастье',

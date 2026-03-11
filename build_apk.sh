@@ -45,15 +45,14 @@ fi
 APK_NAME="green_suitcase_v${NEXT_VERSION}.apk"
 echo "🚀 Подготовка к сборке APK: $APK_NAME"
 
-# Проверяем, существует ли папка android, если нет - создаем через prebuild
-if [ ! -d "android" ]; then
-    echo "📦 Настройка нативного Android проекта (prebuild)..."
-    CI=1 npx expo prebuild --platform android --clean
-fi
+# Всегда синхронизируем нативный Android проект с app.json/package.json,
+# чтобы избегать рассинхрона Gradle/плагинов после изменений конфигурации.
+echo "📦 Синхронизация Android проекта (expo prebuild)..."
+CI=1 npx expo prebuild --platform android
 
 echo "🏗 Компиляция Release APK с помощью Gradle..."
 cd android
-./gradlew assembleRelease
+./gradlew clean assembleRelease
 cd ..
 
 BUILT_APK="android/app/build/outputs/apk/release/app-release.apk"
