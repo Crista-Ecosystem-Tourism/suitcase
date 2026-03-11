@@ -5,7 +5,10 @@ set -e
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_DIR"
 
-VERSIONS_DIR="ios_versions"
+# Удаление дубликатов папок от iCloud (фикс проблемы с ".expo 2")
+rm -rf ".expo 2" "node_modules 2" || true
+
+VERSIONS_DIR="versions/ios_versions"
 mkdir -p "$VERSIONS_DIR"
 
 # Находим последний номер версии
@@ -42,7 +45,7 @@ xcodebuild \
   -configuration Release \
   -sdk iphonesimulator \
   -derivedDataPath build \
-  CODE_SIGNING_IDENTITY="-" \
+  CODE_SIGNING_ALLOWED="NO" \
   CODE_SIGNING_REQUIRED="NO" \
   build
 

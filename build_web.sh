@@ -25,9 +25,30 @@ if ! firebase projects:list &> /dev/null; then
     firebase login
 fi
 
+WEB_VERSIONS_DIR="versions/web_versions"
+mkdir -p "$WEB_VERSIONS_DIR"
+
+# Находим последний номер версии
+LATEST_VERSION_DIR=$(ls -1d "$WEB_VERSIONS_DIR"/v* 2>/dev/null | sort -V | tail -n 1)
+
+if [ -z "$LATEST_VERSION_DIR" ]; then
+    NEXT_VERSION=1
+else
+    # Извлекаем цифру из названия папки: v5 -> 5
+    LATEST_VERSION=$(basename "$LATEST_VERSION_DIR" | sed -n 's/v\([0-9]*\)/\1/p')
+    NEXT_VERSION=$((LATEST_VERSION + 1))
+fi
+
+CURRENT_VERSION_DIR="$WEB_VERSIONS_DIR/v${NEXT_VERSION}"
+mkdir -p "$CURRENT_VERSION_DIR"
+
 # 3. Экспортируем веб-бандл через Expo
-echo "📦 Экспорт веб-бандла через Expo..."
+echo "📦 Экспорт веб-бандла v${NEXT_VERSION} через Expo..."
+rm -rf dist
 pnpm expo export --platform web
+
+echo "📂 Сохранение Web-версии в $CURRENT_VERSION_DIR/dist..."
+cp -R dist "$CURRENT_VERSION_DIR/dist"
 
 # 4. Деплоим на Firebase Hosting
 echo "🚀 Деплою на Firebase Hosting..."
