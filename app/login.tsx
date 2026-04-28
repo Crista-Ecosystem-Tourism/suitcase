@@ -11,29 +11,24 @@ import {
     Platform,
     Dimensions,
     StatusBar,
-    SafeAreaView
+    SafeAreaView,
 } from 'react-native';
-import { auth } from '../services/firebase';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useLanguage } from '../hooks/useLanguage';
+import { useAuth } from '../hooks/useAuth';
+import { ApiError } from '../services/api';
 
 const { height } = Dimensions.get('window');
-
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
-
-GoogleSignin.configure({
-    webClientId: '666766674716-o24pjinv3dmk8n7sf0rhfe9r4rsbtprt.apps.googleusercontent.com',
-    iosClientId: '666766674716-bkn35ddvurr5kj42637e6k3a7c8niima.apps.googleusercontent.com',
-});
 
 export default function LoginScreen() {
     const { colors, isDark } = useTheme();
     const { t } = useLanguage();
+    const { login, register } = useAuth();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [name, setName] = useState('');
     const [isLogin, setIsLogin] = useState(true);
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
@@ -43,46 +38,34 @@ export default function LoginScreen() {
             Alert.alert('Error', 'Please enter email and password');
             return;
         }
+        if (!isLogin && password.length < 6) {
+            Alert.alert('Error', 'Password must be at least 6 characters');
+            return;
+        }
 
         setLoading(true);
         try {
             if (isLogin) {
-                await signInWithEmailAndPassword(auth, email, password);
+                await login(email, password);
             } else {
-                await createUserWithEmailAndPassword(auth, email, password);
+                await register(email, password, name || email.split('@')[0]);
             }
-        } catch (error: any) {
-            Alert.alert('Authentication Error', error.message);
+        } catch (error: unknown) {
+            const message =
+                error instanceof ApiError
+                    ? error.detail
+                    : error instanceof Error
+                        ? error.message
+                        : 'Authentication failed';
+            Alert.alert('Authentication Error', message);
         } finally {
             setLoading(false);
         }
     };
 
-    const signInWithGoogle = async () => {
-        try {
-            if (Platform.OS === 'android') {
-                await GoogleSignin.hasPlayServices();
-            }
-            const { data } = await GoogleSignin.signIn();
-
-            if (data?.idToken) {
-                const credential = GoogleAuthProvider.credential(data.idToken);
-                await signInWithCredential(auth, credential);
-            } else {
-                throw new Error("No ID token found!");
-            }
-        } catch (error: any) {
-            if (error.code === 'DEVELOPER_ERROR') {
-                Alert.alert('Developer Error', 'Google Sign-In is misconfigured. In Expo Go it will not work. Build standalone app.');
-            } else {
-                Alert.alert('Google Sign-In Error', error.message || 'Something went wrong');
-            }
-        }
-    };
-
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+            <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
@@ -92,13 +75,27 @@ export default function LoginScreen() {
                         <View style={[styles.logoContainer, { backgroundColor: colors.card }]}>
                             <Ionicons name="airplane" size={50} color={colors.primary} />
                         </View>
-                        <Text style={[styles.title, { color: colors.text }]}>Green{'\n'}Suitcase</Text>
+                        <Text style={[styles.title, { color: colors.text }]}>Suitcase</Text>
                         <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
                             {isLogin ? t.login.welcome + ' ' + t.login.subtitle : t.login.welcome}
                         </Text>
                     </View>
 
                     <View style={styles.form}>
+                        {!isLogin && (
+                            <View style={[styles.inputContainer, { backgroundColor: colors.card }]}>
+                                <Ionicons name="person-outline" size={20} color={colors.secondaryText} style={styles.inputIcon} />
+                                <TextInput
+                                    style={[styles.input, { color: colors.text }]}
+                                    placeholder="Name"
+                                    value={name}
+                                    onChangeText={setName}
+                                    autoCapitalize="words"
+                                    placeholderTextColor={colors.border}
+                                />
+                            </View>
+                        )}
+
                         <View style={[styles.inputContainer, { backgroundColor: colors.card }]}>
                             <Ionicons name="mail-outline" size={20} color={colors.secondaryText} style={styles.inputIcon} />
                             <TextInput
@@ -124,7 +121,7 @@ export default function LoginScreen() {
                             />
                             <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                                 <Ionicons
-                                    name={showPassword ? "eye-off-outline" : "eye-outline"}
+                                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                                     size={20}
                                     color={colors.secondaryText}
                                 />
@@ -140,26 +137,21 @@ export default function LoginScreen() {
                             {loading ? (
                                 <ActivityIndicator color={colors.background} />
                             ) : (
-                                <Text style={[styles.buttonText, { color: colors.background }]}>{isLogin ? t.login.signIn : t.login.signUp}</Text>
+                                <Text style={[styles.buttonText, { color: colors.background }]}>
+                                    {isLogin ? t.login.signIn : t.login.signUp}
+                                </Text>
                             )}
                         </TouchableOpacity>
 
                         <TouchableOpacity onPress={() => setIsLogin(!isLogin)} style={styles.switchBtn}>
                             <Text style={[styles.switchText, { color: colors.secondaryText }]}>
-                                {isLogin ? t.login.switchLogin.split('?')[0] + '? ' : t.login.switchSignUp.split('?')[0] + '? '}
-                                <Text style={[styles.switchTextBold, { color: colors.primary }]}>{isLogin ? t.login.signUp : t.login.signIn}</Text>
+                                {isLogin
+                                    ? t.login.switchLogin.split('?')[0] + '? '
+                                    : t.login.switchSignUp.split('?')[0] + '? '}
+                                <Text style={[styles.switchTextBold, { color: colors.primary }]}>
+                                    {isLogin ? t.login.signUp : t.login.signIn}
+                                </Text>
                             </Text>
-                        </TouchableOpacity>
-
-                        <View style={styles.divider}>
-                            <View style={[styles.line, { backgroundColor: colors.border }]} />
-                            <Text style={[styles.orText, { color: colors.border }]}>{t.login.or}</Text>
-                            <View style={[styles.line, { backgroundColor: colors.border }]} />
-                        </View>
-
-                        <TouchableOpacity style={[styles.googleButton, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={signInWithGoogle} activeOpacity={0.7}>
-                            <Ionicons name="logo-google" size={20} color={colors.text} style={{ marginRight: 10 }} />
-                            <Text style={[styles.googleButtonText, { color: colors.text }]}>{t.login.google}</Text>
                         </TouchableOpacity>
                     </View>
 
@@ -176,7 +168,7 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         paddingHorizontal: 28,
-        paddingTop: height * 0.05
+        paddingTop: height * 0.05,
     },
     header: {
         marginBottom: 40,
@@ -212,9 +204,7 @@ const styles = StyleSheet.create({
         lineHeight: 22,
         maxWidth: '80%',
     },
-    form: {
-        width: '100%',
-    },
+    form: { width: '100%' },
     inputContainer: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -229,14 +219,8 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         elevation: 2,
     },
-    inputIcon: {
-        marginRight: 12,
-    },
-    input: {
-        flex: 1,
-        fontSize: 16,
-        color: '#1C1C1E',
-    },
+    inputIcon: { marginRight: 12 },
+    input: { flex: 1, fontSize: 16, color: '#1C1C1E' },
     button: {
         backgroundColor: '#1C1C1E',
         height: 60,
@@ -250,55 +234,9 @@ const styles = StyleSheet.create({
         shadowRadius: 20,
         elevation: 5,
     },
-    buttonDisabled: {
-        opacity: 0.7,
-    },
-    buttonText: {
-        color: '#fff',
-        fontSize: 18,
-        fontWeight: 'bold',
-    },
-    switchBtn: {
-        marginTop: 24,
-        alignItems: 'center'
-    },
-    switchText: {
-        color: '#8E8E93',
-        fontSize: 15,
-    },
-    switchTextBold: {
-        color: '#007AFF',
-        fontWeight: '700',
-    },
-    divider: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginVertical: 32,
-    },
-    line: {
-        flex: 1,
-        height: 1,
-        backgroundColor: '#E5E5EA'
-    },
-    orText: {
-        marginHorizontal: 16,
-        color: '#C7C7CC',
-        fontSize: 13,
-        fontWeight: '600'
-    },
-    googleButton: {
-        backgroundColor: '#FFFFFF',
-        height: 60,
-        borderRadius: 16,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 1,
-        borderColor: '#E5E5EA',
-    },
-    googleButtonText: {
-        color: '#1C1C1E',
-        fontSize: 16,
-        fontWeight: '600'
-    }
+    buttonDisabled: { opacity: 0.7 },
+    buttonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+    switchBtn: { marginTop: 24, alignItems: 'center' },
+    switchText: { color: '#8E8E93', fontSize: 15 },
+    switchTextBold: { color: '#007AFF', fontWeight: '700' },
 });

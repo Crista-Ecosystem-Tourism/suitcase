@@ -1,12 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth } from '../services/firebase';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { LanguageProvider } from '../hooks/useLanguage';
 import { ThemeProvider, useTheme } from '../hooks/useTheme';
+import { AuthProvider, useAuth } from '../hooks/useAuth';
 
-function useProtectedRoute(user: User | null, isInitializing: boolean) {
+function useProtectedRoute(isAuthenticated: boolean, isInitializing: boolean) {
     const segments = useSegments();
     const router = useRouter();
 
@@ -15,33 +14,27 @@ function useProtectedRoute(user: User | null, isInitializing: boolean) {
 
         const inAuthGroup = segments[0] === 'login';
 
-        if (
-            // If the user is not signed in and the initial segment is not the login group
-            !user &&
-            !inAuthGroup
-        ) {
+        if (!isAuthenticated && !inAuthGroup) {
             router.replace('/login');
-        } else if (user && inAuthGroup) {
+        } else if (isAuthenticated && inAuthGroup) {
             router.replace('/(tabs)');
         }
-    }, [user, segments, isInitializing]);
+    }, [isAuthenticated, segments, isInitializing]);
 }
 
 function NavigationContent() {
     const { colors } = useTheme();
-    const [user, setUser] = useState<User | null>(null);
-    const [isInitializing, setIsInitializing] = useState(true);
+    const { user, initializing } = useAuth();
 
-    useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (usr) => {
-            setUser(usr);
-            if (isInitializing) setIsInitializing(false);
-        });
+    useProtectedRoute(!!user, initializing);
 
-        return unsubscribe;
-    }, []);
-
-    useProtectedRoute(user, isInitializing);
+    if (initializing) {
+        return (
+            <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+                <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+        );
+    }
 
     return (
         <Stack
@@ -50,7 +43,6 @@ function NavigationContent() {
                 headerTintColor: colors.text,
                 headerTitleStyle: { fontWeight: 'bold' },
                 headerBackTitle: '',
-                // Fix for white flash during transitions
                 animation: 'fade',
             }}
         >
@@ -69,7 +61,9 @@ export default function RootLayout() {
     return (
         <LanguageProvider>
             <ThemeProvider>
-                <NavigationContent />
+                <AuthProvider>
+                    <NavigationContent />
+                </AuthProvider>
             </ThemeProvider>
         </LanguageProvider>
     );
@@ -80,5 +74,5 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-    }
+    },
 });

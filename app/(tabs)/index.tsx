@@ -16,7 +16,7 @@ import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { getAllTrips, Trip } from '../../services/trips';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { auth } from '../../services/firebase';
+import { useAuth } from '../../hooks/useAuth';
 import { useLanguage } from '../../hooks/useLanguage';
 import { useTheme } from '../../hooks/useTheme';
 import * as Location from 'expo-location';
@@ -31,6 +31,7 @@ interface TripWithCoords extends Trip {
 export default function HomeScreen() {
     const { colors, isDark } = useTheme();
     const { t } = useLanguage();
+    const { user } = useAuth();
     const [trips, setTrips] = useState<TripWithCoords[]>([]);
     const [refreshing, setRefreshing] = useState(false);
     const [selectedMapTrip, setSelectedMapTrip] = useState<TripWithCoords | null>(null);
@@ -53,7 +54,7 @@ export default function HomeScreen() {
     };
 
     const fetchTrips = async () => {
-        if (!auth.currentUser) return;
+        if (!user) return;
         try {
             const data = await getAllTrips();
             await geocodeAndSet(data);

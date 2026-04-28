@@ -33,6 +33,12 @@ yarn-error.*
 # local env files
 .env*.local
 
+# Firebase artifacts (legacy, no longer used)
+google-services.json
+GoogleService-Info.plist
+.firebaserc
+firebase.json
+
 # typescript
 *.tsbuildinfo
 

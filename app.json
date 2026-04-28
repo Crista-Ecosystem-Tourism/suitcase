@@ -16,8 +16,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "Green-suitcase",
-      "googleServicesFile": "./GoogleService-Info.plist",
+      "bundleIdentifier": "online.crista.suitcase",
       "entitlements": {
         "keychain-access-groups": [
           "$(AppIdentifierPrefix)$(CFBundleIdentifier)"
@@ -35,8 +34,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "greensuitcase.com",
-      "googleServicesFile": "./google-services.json",
+      "package": "online.crista.suitcase",
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyAgYFJS60ZmSmhCUaKhR7xzFkcIWtey1cM"
@@ -53,12 +51,12 @@
     "extra": {
       "eas": {
         "projectId": "99d6a38a-4313-4d50-bfc1-ce05491ff628"
-      }
+      },
+      "apiUrl": "https://api.crista.online"
     },
     "owner": "kiruxa",
     "plugins": [
       "expo-router",
-      "@react-native-google-signin/google-signin",
       "expo-sqlite",
       "@react-native-community/datetimepicker",
       [

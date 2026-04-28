@@ -1,18 +1,7 @@
-import {
-    collection,
-    getDocs,
-    getDoc,
-    doc,
-    addDoc,
-    updateDoc,
-    deleteDoc,
-    query,
-    where
-} from 'firebase/firestore';
-import { db, auth } from './firebase';
+import { apiDelete, apiGet, apiPatch, apiPost } from './api';
 
 export interface Expense {
-    id: string;
+    id?: string;
     trip_id: string;
     amount: number;
     category: string;
@@ -21,60 +10,75 @@ export interface Expense {
     currency?: string;
 }
 
-const getExpensesCollection = () => {
-    const user = auth.currentUser;
-    if (!user) throw new Error('User not authenticated');
-    return collection(db, 'users', user.uid, 'expenses');
+interface ServerExpense {
+    id: string;
+    trip_id: string;
+    amount: number;
+    category: string;
+    title: string;
+    date: string;
+    currency: string | null;
+}
+
+function fromServer(e: ServerExpense): Expense {
+    return {
+        id: e.id,
+        trip_id: e.trip_id,
+        amount: Number(e.amount),
+        category: e.category,
+        title: e.title,
+        date: e.date,
+        currency: e.currency || undefined,
+    };
+}
+
+function toServerCreate(e: Omit<Expense, 'id'>): Record<string, unknown> {
+    return {
+        amount: e.amount,
+        category: e.category,
+        title: e.title,
+        date: e.date,
+        currency: e.currency ?? null,
+    };
+}
+
+function toServerPatch(e: Partial<Expense>): Record<string, unknown> {
+    const body: Record<string, unknown> = {};
+    if (e.amount !== undefined) body.amount = e.amount;
+    if (e.category !== undefined) body.category = e.category;
+    if (e.title !== undefined) body.title = e.title;
+    if (e.date !== undefined) body.date = e.date;
+    if (e.currency !== undefined) body.currency = e.currency || null;
+    return body;
+}
+
+export const addExpense = async (expenseData: Omit<Expense, 'id'>): Promise<string> => {
+    const created = await apiPost<ServerExpense>(
+        `/suitcase/trips/${expenseData.trip_id}/expenses`,
+        toServerCreate(expenseData)
+    );
+    return created.id;
 };
 
-export const getAllExpenses = async () => {
-    const coll = getExpensesCollection();
-    const snapshot = await getDocs(coll);
-    return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-    })) as Expense[];
+export const getExpensesByTrip = async (tripId: string): Promise<Expense[]> => {
+    const ws = await apiGet<{ expenses: ServerExpense[] }>('/suitcase/workspace');
+    return ws.expenses.filter((e) => e.trip_id === tripId).map(fromServer);
 };
 
-export const getExpensesByTrip = async (tripId: string) => {
-    const coll = getExpensesCollection();
-    const q = query(coll, where('trip_id', '==', tripId));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-    })) as Expense[];
-};
-
-export const getExpenseById = async (id: string) => {
-    const user = auth.currentUser;
-    if (!user) throw new Error('User not authenticated');
-    const docRef = doc(db, 'users', user.uid, 'expenses', id);
-    const snapshot = await getDoc(docRef);
-    if (snapshot.exists()) {
-        return { id: snapshot.id, ...snapshot.data() } as Expense;
+export const getExpenseById = async (id: string): Promise<Expense | null> => {
+    try {
+        const ws = await apiGet<{ expenses: ServerExpense[] }>('/suitcase/workspace');
+        const found = ws.expenses.find((e) => e.id === id);
+        return found ? fromServer(found) : null;
+    } catch {
+        return null;
     }
-    return null;
 };
 
-export const addExpense = async (expense: Omit<Expense, 'id'>) => {
-    const coll = getExpensesCollection();
-    return await addDoc(coll, {
-        ...expense,
-        createdAt: new Date().toISOString()
-    });
+export const updateExpense = async (id: string, data: Partial<Expense>): Promise<void> => {
+    await apiPatch<ServerExpense>(`/suitcase/expenses/${id}`, toServerPatch(data));
 };
 
-export const updateExpense = async (id: string, expense: Partial<Expense>) => {
-    const user = auth.currentUser;
-    if (!user) throw new Error('User not authenticated');
-    const docRef = doc(db, 'users', user.uid, 'expenses', id);
-    await updateDoc(docRef, expense);
-};
-
-export const deleteExpense = async (id: string) => {
-    const user = auth.currentUser;
-    if (!user) throw new Error('User not authenticated');
-    const docRef = doc(db, 'users', user.uid, 'expenses', id);
-    await deleteDoc(docRef);
+export const deleteExpense = async (id: string): Promise<void> => {
+    await apiDelete(`/suitcase/expenses/${id}`);
 };

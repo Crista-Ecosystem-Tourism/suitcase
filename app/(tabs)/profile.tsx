@@ -1,14 +1,13 @@
 import React from 'react';
-import { View, Text, StyleSheet, StatusBar, TouchableOpacity, Image, ScrollView, Alert, Modal, TextInput, FlatList } from 'react-native';
+import { View, Text, StyleSheet, StatusBar, TouchableOpacity, ScrollView, Alert, Modal, TextInput, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { auth } from '../../services/firebase';
-import { signOut } from 'firebase/auth';
 import { router } from 'expo-router';
 import { useLanguage } from '../../hooks/useLanguage';
 import { useTheme } from '../../hooks/useTheme';
+import { useAuth } from '../../hooks/useAuth';
 
 export default function ProfileScreen() {
-    const user = auth.currentUser;
+    const { user, signOut } = useAuth();
     const { t, language, setLanguage } = useLanguage();
     const { colors, mode, setMode, isDark } = useTheme();
     const [isLangModalVisible, setIsLangModalVisible] = React.useState(false);
@@ -16,7 +15,7 @@ export default function ProfileScreen() {
 
     const handleSignOut = async () => {
         try {
-            await signOut(auth);
+            await signOut();
             router.replace('/login');
         } catch (error: any) {
             Alert.alert('Error', error.message);
@@ -44,20 +43,16 @@ export default function ProfileScreen() {
             <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
                 <View style={styles.profileHeader}>
                     <View style={styles.avatarContainer}>
-                        {user?.photoURL ? (
-                            <Image source={{ uri: user.photoURL }} style={styles.avatar} />
-                        ) : (
-                            <View style={[styles.avatarPlaceholder, { backgroundColor: colors.gray }]}>
-                                <Text style={[styles.avatarText, { color: colors.secondaryText }]}>
-                                    {user?.email?.charAt(0).toUpperCase() || 'U'}
-                                </Text>
-                            </View>
-                        )}
+                        <View style={[styles.avatarPlaceholder, { backgroundColor: colors.gray }]}>
+                            <Text style={[styles.avatarText, { color: colors.secondaryText }]}>
+                                {user?.email?.charAt(0).toUpperCase() || 'U'}
+                            </Text>
+                        </View>
                         <TouchableOpacity style={[styles.editBadge, { backgroundColor: colors.text, borderColor: colors.background }]}>
                             <Ionicons name="camera" size={16} color={colors.background} />
                         </TouchableOpacity>
                     </View>
-                    <Text style={[styles.userName, { color: colors.text }]}>{user?.displayName || 'Traveler'}</Text>
+                    <Text style={[styles.userName, { color: colors.text }]}>{user?.name || 'Traveler'}</Text>
                     <Text style={[styles.userEmail, { color: colors.secondaryText }]}>{user?.email}</Text>
                 </View>
 

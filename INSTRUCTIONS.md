@@ -61,18 +61,17 @@ npx expo start
 - Затем удаляет старую версию приложения и устанавливает новую через `xcrun simctl`.
 - Оставляет папку `ios` для быстрого инкрементального билда в будущем.
 
-### 3. Сборка Web и Деплой на Firebase Hosting 
+### 3. Веб-версия
 
-Команда для запуска:
-```bash
-./build_web.sh
-```
-**Что делает скрипт:**
-- Проверяет наличие зависимостей (папки `node_modules` и пакета `expo`) и устанавливает их при необходимости.
-- Автоматически проверяет установку и логин в `firebase cli`.
-- Собирает production-версию веб-приложения через `npx expo export --platform web`.
-- Сохраняет копию собранного `dist` в историю сборок: `versions/web_versions/vX/dist`.
-- Выполняет деплой (`firebase deploy --only hosting`) новой версии на сервер Firebase.
+Веб-версия Suitcase собрана **в основном фронтенде Crista** (`frontend/`, раздел «Мой чемодан» в сайдбаре). Отдельной сборки и Firebase Hosting больше нет — данные едут в общий бэкенд `ai_agent` (`/suitcase/*`).
+
+---
+
+## 🔌 Подключение к Crista API
+
+Мобильное приложение хранит данные и аутентификацию в собственном бэкенде Crista (PostgreSQL + JWT), а не в Firebase. URL API задаётся через `app.json → expo.extra.apiUrl` (по умолчанию `https://api.crista.online`) или переменную `EXPO_PUBLIC_API_URL`.
+
+Регистрация/логин: email + пароль через `/auth/register` и `/auth/login`. Токен хранится локально в `AsyncStorage`.
 
 ---
 
