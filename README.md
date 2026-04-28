@@ -1,6 +1,6 @@
 # Suitcase (Crista)
 
-Мобильное приложение экосистемы **Crista** на **Expo** (React Native): поездки, карта, цели, архив, расходы, локальное хранилище (SQLite через Expo), авторизация (Firebase / Google Sign-In).
+Мобильное приложение экосистемы **Crista** на **Expo** (React Native) и отдельный backend-сервис Suitcase: поездки, карта, цели, архив, расходы, единая авторизация Crista через PostgreSQL + JWT.
 
 Репозиторий: [github.com/Crista-Ecosystem-Tourism/suitcase](https://github.com/Crista-Ecosystem-Tourism/suitcase)
 
@@ -8,7 +8,7 @@
 
 - **Expo SDK ~52**, **React Native 0.76**, **expo-router** (файловый роутинг в `app/`)
 - Карты: **react-native-maps**
-- Firebase, Google Sign-In — см. `app.json` / `google-services.json` / `GoogleService-Info.plist` (не коммить секреты в публичные репозитории без необходимости)
+- Backend: **FastAPI**, **SQLAlchemy async**, **Alembic**, общая PostgreSQL экосистемы Crista.
 
 ## Структура
 
@@ -21,6 +21,7 @@ suitcase/
 │   ├── login.tsx
 │   └── _layout.tsx
 ├── assets/
+├── backend/               # отдельный FastAPI-сервис и Docker-контейнер Suitcase
 ├── app.json              # конфиг Expo (схема, иконки, нативные ключи карт)
 ├── package.json
 └── ...
@@ -48,11 +49,11 @@ npm run ios
 
 ## Переменные и секреты
 
-- Конфигурация Firebase и ключей карт задаётся в **`app.json`** и нативных файлах — перед публикацией проверьте, что секреты не утекли в git.
-- Для продакшена используйте **EAS Secrets** / переменные окружения по документации Expo.
+- `EXPO_PUBLIC_API_URL` задаёт URL backend Suitcase для мобильного приложения. По умолчанию: `https://api.crista.online/suitcase-api`.
+- `backend/` использует общую PostgreSQL через `DATABASE_URL` или `POSTGRES_*`, а также общий `JWT_SECRET`.
 
 ## Связь с backend Crista
 
-Приложение может работать автономно или позже связываться с **AI Agent** / REST API — уточните базовый URL в коде клиента, когда интеграция будет готова.
+Мобильное приложение и веб-раздел «Мой чемодан» работают с отдельным сервисом Suitcase (`/suitcase-api/*`). Пользователи остаются едиными для Crista: таблица `app_user` и `JWT_SECRET` общие с основным backend.
 
 Организация: [Crista Ecosystem Tourism на GitHub](https://github.com/Crista-Ecosystem-Tourism).

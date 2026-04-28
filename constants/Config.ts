@@ -1,14 +1,14 @@
 import Constants from 'expo-constants';
 
 /**
- * URL базового API Crista (тот же, что у фронта /ai_agent).
+ * URL базового API Suitcase.
  * Настраивается через app.json → expo.extra.apiUrl
  * или через переменные окружения EXPO_PUBLIC_API_URL.
  */
 export const ApiBaseUrl: string =
   (Constants.expoConfig?.extra as Record<string, string> | undefined)?.apiUrl?.toString() ||
   (process.env.EXPO_PUBLIC_API_URL as string | undefined) ||
-  'https://api.crista.online';
+  'https://api.crista.online/suitcase-api';
 
 export const GoogleMapsApiKey = 'AIzaSyAgYFJS60ZmSmhCUaKhR7xzFkcIWtey1cM';
 

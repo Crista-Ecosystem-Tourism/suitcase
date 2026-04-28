@@ -1,0 +1,13 @@
+name: Sync to crs
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  sync:
+    uses: Crista-Ecosystem-Tourism/crs/.github/workflows/reusable-sync-to-crs.yml@main
+    with:
+      target_dir: suitcase
+    secrets:
+      CRS_SYNC_PAT: ${{ secrets.CRS_SYNC_PAT }}
