@@ -32,17 +32,17 @@ VERSIONS_DIR="versions/android_versions"
 mkdir -p "$VERSIONS_DIR"
 
 # Находим последний номер версии
-LATEST_VERSION_FILE=$(ls -1 "$VERSIONS_DIR"/green_suitcase_v*.apk 2>/dev/null | sort -V | tail -n 1)
+LATEST_VERSION_FILE=$(ls -1 "$VERSIONS_DIR"/suitcase_v*.apk 2>/dev/null | sort -V | tail -n 1)
 
 if [ -z "$LATEST_VERSION_FILE" ]; then
     NEXT_VERSION=1
 else
-    # Извлекаем цифру из названия, например green_suitcase_v5.apk -> 5
+    # Извлекаем цифру из названия, например suitcase_v5.apk -> 5
     LATEST_VERSION=$(basename "$LATEST_VERSION_FILE" | sed -n 's/.*_v\([0-9]*\)\.apk/\1/p')
     NEXT_VERSION=$((LATEST_VERSION + 1))
 fi
 
-APK_NAME="green_suitcase_v${NEXT_VERSION}.apk"
+APK_NAME="suitcase_v${NEXT_VERSION}.apk"
 echo "🚀 Подготовка к сборке APK: $APK_NAME"
 
 # Всегда синхронизируем нативный Android проект с app.json/package.json,

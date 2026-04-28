@@ -20,7 +20,7 @@ export const translations = {
             searchPlaceholder: 'Search country...',
         },
         home: {
-            appTitle: 'Green Suitcase',
+            appTitle: 'Suitcase',
             tripsCount: 'Trips',
             lastTrip: 'Last Trip',
             lastBadge: 'Last',
@@ -154,7 +154,7 @@ export const translations = {
             searchPlaceholder: 'Поиск страны...',
         },
         home: {
-            appTitle: 'Зеленый Чемодан',
+            appTitle: 'Чемодан',
             tripsCount: 'Путешествия',
             lastTrip: 'Последнее путешествие',
             lastBadge: 'Последнее',

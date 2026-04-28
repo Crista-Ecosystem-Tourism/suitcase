@@ -19,7 +19,7 @@ if [ ! -d "node_modules/expo" ]; then
     npm install expo --legacy-peer-deps
 fi
 
-echo "🌐 Деплой веб-версии Green Suitcase на Firebase Hosting"
+echo "🌐 Деплой веб-версии Suitcase на Firebase Hosting"
 echo "========================================================="
 
 # 1. Проверяем наличие Firebase CLI

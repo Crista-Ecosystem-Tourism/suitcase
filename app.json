@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "green_suitcase",
-    "slug": "green_suitcase",
-    "scheme": "green-suitcase",
+    "name": "Suitcase",
+    "slug": "suitcase",
+    "scheme": "suitcase",
     "jsEngine": "jsc",
     "newArchEnabled": true,
     "version": "1.0.0",
@@ -64,7 +64,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow Green Suitcase to use your location."
+          "locationAlwaysAndWhenInUsePermission": "Allow Suitcase to use your location."
         }
       ],
       "expo-asset"

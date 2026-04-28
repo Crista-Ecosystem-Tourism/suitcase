@@ -25,7 +25,7 @@ VERSIONS_DIR="versions/ios_versions"
 mkdir -p "$VERSIONS_DIR"
 
 # Находим последний номер версии
-LATEST_VERSION_FILE=$(ls -1 "$VERSIONS_DIR"/green_suitcase_v*.tar.gz 2>/dev/null | sort -V | tail -n 1)
+LATEST_VERSION_FILE=$(ls -1 "$VERSIONS_DIR"/suitcase_v*.tar.gz 2>/dev/null | sort -V | tail -n 1)
 
 if [ -z "$LATEST_VERSION_FILE" ]; then
     NEXT_VERSION=1
@@ -34,7 +34,7 @@ else
     NEXT_VERSION=$((LATEST_VERSION + 1))
 fi
 
-APP_NAME="green_suitcase_v${NEXT_VERSION}"
+APP_NAME="suitcase_v${NEXT_VERSION}"
 echo "🚀 Подготовка к сборке iOS: $APP_NAME"
 
 # Всегда синхронизируем нативный iOS проект с app.json/package.json.
