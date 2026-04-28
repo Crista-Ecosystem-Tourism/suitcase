@@ -42,6 +42,13 @@ firebase.json
 # typescript
 *.tsbuildinfo
 
+# Python backend
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
 # generated native folders
 /ios
 /android
