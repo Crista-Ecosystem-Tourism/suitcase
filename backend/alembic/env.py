@@ -22,15 +22,13 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-_db_url = get_database_url()
-config.set_main_option("sqlalchemy.url", _db_url.replace("%", "%%"))
-
+# Не кладём URL в alembic.ini через set_main_option: ConfigParser ломается на % в пароле (%40 и т.д.).
 target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=config.get_main_option("sqlalchemy.url"),
+        url=get_database_url(),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -53,8 +51,10 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_async_migrations() -> None:
+    section = dict(config.get_section(config.config_ini_section) or {})
+    section["sqlalchemy.url"] = get_database_url()
     connectable = async_engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        section,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
