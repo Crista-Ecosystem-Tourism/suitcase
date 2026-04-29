@@ -9,7 +9,7 @@ from alembic import context
 from dotenv import load_dotenv
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import async_engine_from_config
+from sqlalchemy.ext.asyncio import create_async_engine
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 load_dotenv()
@@ -22,7 +22,8 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Не кладём URL в alembic.ini через set_main_option: ConfigParser ломается на % в пароле (%40 и т.д.).
+# URL никогда не передаём через alembic.ini / set_main_option: ConfigParser интерпретирует % как interpolation.
+# Движок создаём напрямую из строки — пароли с @, %40, %% и т.д. безопасны.
 target_metadata = Base.metadata
 
 
@@ -51,11 +52,8 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_async_migrations() -> None:
-    section = dict(config.get_section(config.config_ini_section) or {})
-    section["sqlalchemy.url"] = get_database_url()
-    connectable = async_engine_from_config(
-        section,
-        prefix="sqlalchemy.",
+    connectable = create_async_engine(
+        get_database_url(),
         poolclass=pool.NullPool,
     )
 
