@@ -1,0 +1,21 @@
+# Security-сканер сервиса. Реальная логика — в crs/reusable-security-scan.yml.
+# Триггеры: push в main и PR в main. Результаты — в Security → Code scanning alerts этого репо.
+
+name: Security Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    permissions:
+      security-events: write
+      contents: read
+    uses: Crista-Ecosystem-Tourism/crs/.github/workflows/reusable-security-scan.yml@main
