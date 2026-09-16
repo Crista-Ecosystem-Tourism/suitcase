@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, MetaData, Numeric, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, MetaData, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -28,21 +28,6 @@ class Base(DeclarativeBase):
 class TimestampMixin:
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
-
-
-class User(Base, TimestampMixin):
-    """Shared Crista account table owned by the main auth service."""
-
-    __tablename__ = "app_user"
-
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    email: Mapped[Optional[str]] = mapped_column(String, unique=True, nullable=True, index=True)
-    name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    auth_provider: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    hashed_password: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-
-    __table_args__ = (Index("idx_user_email", "email"),)
 
 
 class SuitcaseTrip(Base, TimestampMixin):

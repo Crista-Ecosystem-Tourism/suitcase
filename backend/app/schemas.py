@@ -1,47 +1,8 @@
 from __future__ import annotations
 
-import re
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator
-
-EMAIL_RE = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
-
-
-class RegisterIn(BaseModel):
-    email: str
-    password: str = Field(..., min_length=6)
-    name: str = Field(..., min_length=1)
-
-    @field_validator("email")
-    @classmethod
-    def validate_email(cls, value: str) -> str:
-        if not EMAIL_RE.match(value):
-            raise ValueError("Некорректный адрес электронной почты")
-        return value.lower()
-
-
-class LoginIn(BaseModel):
-    email: str
-    password: str
-
-    @field_validator("email")
-    @classmethod
-    def validate_email(cls, value: str) -> str:
-        if not EMAIL_RE.match(value):
-            raise ValueError("Некорректный адрес электронной почты")
-        return value.lower()
-
-
-class UserOut(BaseModel):
-    id: str
-    email: str
-    name: Optional[str] = None
-
-
-class AuthOut(BaseModel):
-    access_token: str
-    user: UserOut
+from pydantic import BaseModel
 
 
 class SuitcaseTripCreate(BaseModel):

@@ -10,9 +10,6 @@ from starlette.status import HTTP_400_BAD_REQUEST, HTTP_401_UNAUTHORIZED, HTTP_4
 from app.config import get_cors_origins
 from app.db import dispose_engine, get_db
 from app.schemas import (
-    AuthOut,
-    LoginIn,
-    RegisterIn,
     SuitcaseExpenseCreate,
     SuitcaseExpenseOut,
     SuitcaseExpensePatch,
@@ -23,20 +20,15 @@ from app.schemas import (
     SuitcaseTripOut,
     SuitcaseTripPatch,
     SuitcaseWorkspaceOut,
-    UserOut,
 )
-from app.security import create_access_token, get_current_user
+from app.security import get_current_user
 from app.services import (
-    can_login,
     create_expense,
     create_goal,
     create_trip,
-    create_user,
     delete_expense,
     delete_goal,
     delete_trip,
-    get_user_by_email,
-    get_user_by_id,
     update_expense,
     update_goal,
     update_trip,
@@ -66,35 +58,6 @@ app.add_middleware(
 @app.get("/health")
 def health() -> dict[str, bool]:
     return {"ok": True}
-
-
-@app.post("/auth/register", response_model=AuthOut)
-async def register(payload: RegisterIn, db: AsyncSession = Depends(get_db)) -> AuthOut:
-    existing = await get_user_by_email(db, payload.email)
-    if existing:
-        raise HTTPException(status_code=HTTP_409_CONFLICT, detail="Пользователь с таким email уже существует")
-    user = await create_user(db, payload.email, payload.password, payload.name)
-    token = create_access_token(sub=user.id, extra={"email": user.email})
-    return AuthOut(access_token=token, user=UserOut(id=user.id, email=user.email or "", name=user.name))
-
-
-@app.post("/auth/login", response_model=AuthOut)
-async def login(payload: LoginIn, db: AsyncSession = Depends(get_db)) -> AuthOut:
-    user = await get_user_by_email(db, payload.email)
-    if not can_login(user, payload.password):
-        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail="Неверный email или пароль")
-    if not user or not user.is_active:
-        raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail="Аккаунт деактивирован")
-    token = create_access_token(sub=user.id, extra={"email": user.email})
-    return AuthOut(access_token=token, user=UserOut(id=user.id, email=user.email or "", name=user.name))
-
-
-@app.get("/auth/me", response_model=UserOut)
-async def me(user=Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> UserOut:
-    row = await get_user_by_id(db, user["sub"])
-    if not row:
-        raise HTTPException(status_code=HTTP_401_UNAUTHORIZED, detail="Пользователь не найден")
-    return UserOut(id=row.id, email=row.email or "", name=row.name)
 
 
 @app.get("/suitcase/workspace", response_model=SuitcaseWorkspaceOut)

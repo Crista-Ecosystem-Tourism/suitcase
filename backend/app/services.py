@@ -5,11 +5,10 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import delete, func, insert, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import SuitcaseExpense, SuitcaseGoal, SuitcaseTrip, User
-from app.security import hash_password, verify_password
+from app.models import SuitcaseExpense, SuitcaseGoal, SuitcaseTrip
 
 DEFAULT_SUITCASE_GOALS: list[dict[str, Any]] = [
     {"title": "Стран посещено", "current": 0, "total": 30, "color": "#007AFF"},
@@ -21,42 +20,6 @@ DEFAULT_SUITCASE_GOALS: list[dict[str, Any]] = [
 
 def _iso(dt: datetime | None) -> str | None:
     return dt.isoformat() if dt else None
-
-
-async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
-    return (
-        await db.execute(select(User).where(func.lower(User.email) == email.lower()))
-    ).scalar_one_or_none()
-
-
-async def get_user_by_id(db: AsyncSession, user_id: str) -> User | None:
-    return (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
-
-
-async def create_user(db: AsyncSession, email: str, password: str, name: str) -> User:
-    now = datetime.now(timezone.utc)
-    user_id = uuid.uuid4().hex
-    await db.execute(
-        insert(User).values(
-            id=user_id,
-            email=email.lower(),
-            name=name,
-            hashed_password=hash_password(password),
-            auth_provider="password",
-            is_active=True,
-            created_at=now,
-            updated_at=now,
-        )
-    )
-    await db.commit()
-    user = await get_user_by_id(db, user_id)
-    if not user:
-        raise RuntimeError("User was not created")
-    return user
-
-
-def can_login(user: User | None, password: str) -> bool:
-    return bool(user and user.hashed_password and user.is_active and verify_password(password, user.hashed_password))
 
 
 def trip_out(t: SuitcaseTrip) -> dict[str, Any]:
