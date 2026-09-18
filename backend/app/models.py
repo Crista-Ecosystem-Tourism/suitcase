@@ -34,7 +34,10 @@ class SuitcaseTrip(Base, TimestampMixin):
     __tablename__ = "suitcase_trip"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    user_id: Mapped[str] = mapped_column(ForeignKey("app_user.id", ondelete="CASCADE"), nullable=False, index=True)
+    # ``app_user`` belongs to ai_agent. Its database foreign key is declared in
+    # the Suitcase migration, while this independent ORM metadata keeps only the
+    # external identity so it does not try to own or resolve the auth table.
+    user_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     country: Mapped[str] = mapped_column(String(200), nullable=False)
     city: Mapped[str] = mapped_column(String(200), nullable=False)
     start_date: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -67,7 +70,7 @@ class SuitcaseGoal(Base, TimestampMixin):
     __tablename__ = "suitcase_goal"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    user_id: Mapped[str] = mapped_column(ForeignKey("app_user.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(300), nullable=False)
     current: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total: Mapped[int] = mapped_column(Integer, nullable=False, default=1)

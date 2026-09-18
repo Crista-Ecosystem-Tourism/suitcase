@@ -1,0 +1,77 @@
+name: Suitcase backend CI
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+
+concurrency:
+  group: suitcase-backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  auth-to-trip-smoke:
+    name: Auth to persisted Suitcase trip
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: crista_test
+          POSTGRES_PASSWORD: crista_cross_service_test
+          POSTGRES_DB: crista_cross_service
+        options: >-
+          --health-cmd "pg_isready -U crista_test -d crista_cross_service"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 5432:5432
+    env:
+      DATABASE_URL: postgresql+asyncpg://crista_test:crista_cross_service_test@127.0.0.1:5432/crista_cross_service
+      JWT_SECRET: crista-cross-service-jwt-secret-32-bytes-minimum
+    steps:
+      - name: Checkout Suitcase
+        uses: actions/checkout@v4
+      - name: Checkout compatible ai_agent main
+        uses: actions/checkout@v4
+        with:
+          repository: Crista-Ecosystem-Tourism/ai_agent
+          ref: main
+          path: ai_agent
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            ai_agent/requirements.txt
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r backend/requirements.txt -r ai_agent/requirements.txt
+      - name: Migrate ai_agent-owned schema
+        working-directory: ai_agent
+        run: python -m alembic upgrade head
+      - name: Migrate Suitcase-owned schema
+        working-directory: backend
+        run: python -m alembic upgrade head
+      - name: Check schema ownership boundary
+        working-directory: backend
+        env:
+          PYTHONPATH: .
+        run: python -m unittest tests.test_schema_ownership -v
+      - name: Smoke auth to persisted trip
+        working-directory: backend
+        env:
+          PYTHONPATH: .
+          AI_AGENT_DIR: ${{ github.workspace }}/ai_agent
+        run: python tests/cross_service_auth_to_trip_smoke.py
