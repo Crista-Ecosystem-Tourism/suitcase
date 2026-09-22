@@ -73,12 +73,27 @@ def main() -> None:
         )
         trip.raise_for_status()
 
+        expense = client.post(
+            f"/suitcase/trips/{trip.json()['id']}/expenses",
+            headers=headers,
+            json={
+                "amount": 1250,
+                "category": "transport",
+                "title": "Аэроэкспресс",
+                "date": "2026-09-18",
+                "currency": "RUB",
+            },
+        )
+        expense.raise_for_status()
+
         workspace = client.get("/suitcase/workspace", headers=headers)
         workspace.raise_for_status()
         body = workspace.json()
 
     if not any(item["id"] == trip.json()["id"] for item in body["trips"]):
         raise AssertionError("created trip was not returned by the authenticated workspace")
+    if not any(item["id"] == expense.json()["id"] for item in body["expenses"]):
+        raise AssertionError("created expense was not returned by the authenticated workspace")
     if len(body["goals"]) != 4:
         raise AssertionError("new Suitcase account did not receive the four default goals")
 
