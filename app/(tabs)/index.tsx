@@ -40,6 +40,7 @@ export default function HomeScreen() {
     const [selectedMapTrip, setSelectedMapTrip] = useState<TripWithCoords | null>(null);
     const popupAnim = useRef(new Animated.Value(0)).current;
     const focusedRef = useRef(false);
+    const tripRequestRef = useRef(0);
 
     const geocodeTrips = useCallback(async (tripList: Trip[]) => {
         const active = tripList.filter(t => !t.isArchived);
@@ -59,23 +60,25 @@ export default function HomeScreen() {
 
     const fetchTrips = useCallback(async (showLoading: boolean) => {
         if (!user) {
+            tripRequestRef.current += 1;
             setTrips([]);
             setLoadError(false);
             setLoading(false);
             setRefreshing(false);
             return;
         }
+        const requestId = ++tripRequestRef.current;
         if (showLoading) setLoading(true);
         setLoadError(false);
         try {
             const data = await getAllTrips();
             const mappedTrips = await geocodeTrips(data);
-            if (focusedRef.current) setTrips(mappedTrips);
+            if (focusedRef.current && tripRequestRef.current === requestId) setTrips(mappedTrips);
         } catch (error) {
             console.error('Fetch trips error:', error);
-            if (focusedRef.current) setLoadError(true);
+            if (focusedRef.current && tripRequestRef.current === requestId) setLoadError(true);
         } finally {
-            if (focusedRef.current) {
+            if (focusedRef.current && tripRequestRef.current === requestId) {
                 setLoading(false);
                 setRefreshing(false);
             }
@@ -88,6 +91,7 @@ export default function HomeScreen() {
             void fetchTrips(true);
             return () => {
                 focusedRef.current = false;
+                tripRequestRef.current += 1;
             };
         }, [fetchTrips])
     );

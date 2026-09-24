@@ -136,6 +136,13 @@ export const translations = {
             subtitle: 'Set your travel goals and track your progress.',
             addGoalBtn: 'Add New Goal',
             viewGoalsBtn: 'View All Goals',
+            active: 'Active',
+            completed: 'Completed',
+            activeTitle: 'Your goals',
+            loading: 'Loading your goals…',
+            loadError: 'Goals could not be loaded. Check your connection and try again.',
+            retry: 'Try again',
+            empty: 'No goals yet.',
         }
     },
     ru: {
@@ -273,6 +280,13 @@ export const translations = {
             subtitle: 'Ставьте цели в путешествиях и отслеживайте прогресс.',
             addGoalBtn: 'Добавить цель',
             viewGoalsBtn: 'Показать все цели',
+            active: 'Активные',
+            completed: 'Завершённые',
+            activeTitle: 'Ваши цели',
+            loading: 'Загружаем цели…',
+            loadError: 'Не удалось загрузить цели. Проверьте соединение и попробуйте ещё раз.',
+            retry: 'Повторить',
+            empty: 'Целей пока нет.',
         }
     }
 };

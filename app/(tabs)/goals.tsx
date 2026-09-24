@@ -1,52 +1,58 @@
-import React, { useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
     View,
     Text,
     StyleSheet,
     ScrollView,
-    TouchableOpacity,
     SafeAreaView,
     StatusBar,
-    Dimensions
+    ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import { useTheme } from '../../hooks/useTheme';
 import { useLanguage } from '../../hooks/useLanguage';
-
-const { width } = Dimensions.get('window');
-
-interface Goal {
-    id: string;
-    title: string;
-    current: number;
-    total: number;
-    icon: string;
-    color: string;
-}
-
-const INITIAL_GOALS: Goal[] = [
-    { id: '1', title: 'Countries Visited', current: 12, total: 30, icon: 'earth', color: '#007AFF' },
-    { id: '2', title: 'World Wonders', current: 3, total: 7, icon: 'medal', color: '#FF9500' },
-    { id: '3', title: 'Photo Collection', current: 450, total: 1000, icon: 'images', color: '#AF52DE' },
-    { id: '4', title: 'Flight Hours', current: 86, total: 200, icon: 'airplane', color: '#34C759' },
-];
+import { getGoals, type SuitcaseGoal } from '../../services/goals';
 
 export default function GoalsScreen() {
     const { colors, isDark } = useTheme();
     const { t } = useLanguage();
-    const [goals, setGoals] = useState<Goal[]>(INITIAL_GOALS);
+    const [goals, setGoals] = useState<SuitcaseGoal[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
+    const requestIdRef = useRef(0);
 
-    const renderGoal = (goal: Goal) => {
-        const progress = Math.min(goal.current / goal.total, 1);
+    const loadGoals = useCallback(async () => {
+        const requestId = ++requestIdRef.current;
+        setLoading(true);
+        setLoadError(false);
+        try {
+            const result = await getGoals();
+            if (requestIdRef.current === requestId) setGoals(result);
+        } catch (error) {
+            console.error('Fetch goals error:', error);
+            if (requestIdRef.current === requestId) setLoadError(true);
+        } finally {
+            if (requestIdRef.current === requestId) setLoading(false);
+        }
+    }, []);
+
+    useFocusEffect(
+        useCallback(() => {
+            void loadGoals();
+            return () => {
+                requestIdRef.current += 1;
+            };
+        }, [loadGoals])
+    );
+
+    const renderGoal = (goal: SuitcaseGoal) => {
+        const progress = goal.total > 0 ? Math.min(goal.current / goal.total, 1) : 0;
 
         return (
-            <TouchableOpacity
-                key={goal.id}
-                style={[styles.goalCard, { backgroundColor: colors.card }]}
-                activeOpacity={0.7}
-            >
+            <View key={goal.id} style={[styles.goalCard, { backgroundColor: colors.card }]}>
                 <View style={[styles.iconContainer, { backgroundColor: goal.color + '15' }]}>
-                    <Ionicons name={goal.icon as any} size={24} color={goal.color} />
+                    <Ionicons name="flag-outline" size={24} color={goal.color} />
                 </View>
 
                 <View style={styles.goalInfo}>
@@ -66,9 +72,12 @@ export default function GoalsScreen() {
                         />
                     </View>
                 </View>
-            </TouchableOpacity>
+            </View>
         );
     };
+
+    const activeGoals = goals.filter(goal => goal.current < goal.total).length;
+    const completedGoals = goals.length - activeGoals;
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -76,9 +85,6 @@ export default function GoalsScreen() {
 
             <View style={styles.header}>
                 <Text style={[styles.title, { color: colors.text }]}>{t.tabs.goals || 'Goals'}</Text>
-                <TouchableOpacity style={[styles.addBtn, { backgroundColor: colors.primary }]}>
-                    <Ionicons name="add" size={24} color="#FFF" />
-                </TouchableOpacity>
             </View>
 
             <ScrollView
@@ -87,25 +93,38 @@ export default function GoalsScreen() {
             >
                 <View style={styles.statsOverview}>
                     <View style={[styles.statBox, { backgroundColor: colors.card }]}>
-                        <Text style={[styles.statValue, { color: colors.primary }]}>4</Text>
-                        <Text style={[styles.statLabel, { color: colors.secondaryText }]}>Active</Text>
+                        <Text style={[styles.statValue, { color: colors.primary }]}>{activeGoals}</Text>
+                        <Text style={[styles.statLabel, { color: colors.secondaryText }]}>{t.goals.active}</Text>
                     </View>
                     <View style={[styles.statBox, { backgroundColor: colors.card }]}>
-                        <Text style={[styles.statValue, { color: colors.success }]}>12</Text>
-                        <Text style={[styles.statLabel, { color: colors.secondaryText }]}>Completed</Text>
+                        <Text style={[styles.statValue, { color: colors.success }]}>{completedGoals}</Text>
+                        <Text style={[styles.statLabel, { color: colors.secondaryText }]}>{t.goals.completed}</Text>
                     </View>
                 </View>
 
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>Active Goals</Text>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>{t.goals.activeTitle}</Text>
+                {loading && goals.length === 0 && (
+                    <View style={styles.statusBox}>
+                        <ActivityIndicator color={colors.primary} size="large" />
+                        <Text style={[styles.statusText, { color: colors.secondaryText }]}>{t.goals.loading}</Text>
+                    </View>
+                )}
+                {loadError && (
+                    <View style={styles.statusBox}>
+                        <Text style={[styles.statusText, { color: colors.secondaryText }]}>{t.goals.loadError}</Text>
+                        <Text
+                            accessibilityRole="button"
+                            onPress={() => void loadGoals()}
+                            style={[styles.retryText, { color: colors.primary }]}
+                        >
+                            {t.goals.retry}
+                        </Text>
+                    </View>
+                )}
+                {!loading && !loadError && goals.length === 0 && (
+                    <Text style={[styles.statusText, { color: colors.secondaryText }]}>{t.goals.empty}</Text>
+                )}
                 {goals.map(renderGoal)}
-
-                <TouchableOpacity
-                    style={[styles.suggestCard, { borderColor: colors.border }]}
-                    activeOpacity={0.8}
-                >
-                    <Ionicons name="bulb-outline" size={24} color={colors.primary} />
-                    <Text style={[styles.suggestText, { color: colors.text }]}>Need more goals? Tap here for ideas!</Text>
-                </TouchableOpacity>
 
                 <View style={{ height: 100 }} />
             </ScrollView>
@@ -128,13 +147,6 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 34,
         fontWeight: 'bold',
-    },
-    addBtn: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        justifyContent: 'center',
-        alignItems: 'center',
     },
     scrollContent: {
         padding: 16,
@@ -162,6 +174,19 @@ const styles = StyleSheet.create({
         fontSize: 20,
         fontWeight: 'bold',
         marginBottom: 16,
+    },
+    statusBox: {
+        alignItems: 'center',
+        padding: 24,
+        marginBottom: 12,
+    },
+    statusText: {
+        textAlign: 'center',
+        marginVertical: 8,
+    },
+    retryText: {
+        padding: 8,
+        fontWeight: '700',
     },
     goalCard: {
         flexDirection: 'row',
@@ -203,20 +228,5 @@ const styles = StyleSheet.create({
     progressBarFill: {
         height: '100%',
         borderRadius: 3,
-    },
-    suggestCard: {
-        marginTop: 12,
-        padding: 20,
-        borderRadius: 24,
-        borderWidth: 1,
-        borderStyle: 'dashed',
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    suggestText: {
-        fontSize: 15,
-        fontWeight: '500',
-        flex: 1,
     },
 });
