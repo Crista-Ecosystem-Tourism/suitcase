@@ -4,6 +4,7 @@ import {
     Text,
     StyleSheet,
     StatusBar,
+    ActivityIndicator,
     TouchableOpacity,
     FlatList,
     RefreshControl,
@@ -33,11 +34,14 @@ export default function HomeScreen() {
     const { t } = useLanguage();
     const { user } = useAuth();
     const [trips, setTrips] = useState<TripWithCoords[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [selectedMapTrip, setSelectedMapTrip] = useState<TripWithCoords | null>(null);
     const popupAnim = useRef(new Animated.Value(0)).current;
+    const focusedRef = useRef(false);
 
-    const geocodeAndSet = async (tripList: Trip[]) => {
+    const geocodeTrips = useCallback(async (tripList: Trip[]) => {
         const active = tripList.filter(t => !t.isArchived);
         const results: TripWithCoords[] = [];
         for (const trip of active) {
@@ -50,29 +54,47 @@ export default function HomeScreen() {
             } catch { /* skip geocoding error */ }
             results.push(trip);
         }
-        setTrips(results);
-    };
+        return results;
+    }, []);
 
-    const fetchTrips = async () => {
-        if (!user) return;
+    const fetchTrips = useCallback(async (showLoading: boolean) => {
+        if (!user) {
+            setTrips([]);
+            setLoadError(false);
+            setLoading(false);
+            setRefreshing(false);
+            return;
+        }
+        if (showLoading) setLoading(true);
+        setLoadError(false);
         try {
             const data = await getAllTrips();
-            await geocodeAndSet(data);
+            const mappedTrips = await geocodeTrips(data);
+            if (focusedRef.current) setTrips(mappedTrips);
         } catch (error) {
             console.error('Fetch trips error:', error);
+            if (focusedRef.current) setLoadError(true);
+        } finally {
+            if (focusedRef.current) {
+                setLoading(false);
+                setRefreshing(false);
+            }
         }
-    };
+    }, [geocodeTrips, user]);
 
     useFocusEffect(
         useCallback(() => {
-            fetchTrips();
-        }, [])
+            focusedRef.current = true;
+            void fetchTrips(true);
+            return () => {
+                focusedRef.current = false;
+            };
+        }, [fetchTrips])
     );
 
     const onRefresh = async () => {
         setRefreshing(true);
-        await fetchTrips();
-        setRefreshing(false);
+        await fetchTrips(false);
     };
 
     const showMapPopup = (trip: TripWithCoords) => {
@@ -92,6 +114,27 @@ export default function HomeScreen() {
 
     const renderListHeader = () => (
         <View>
+            {loading && activeTrips.length === 0 && (
+                <View style={[styles.emptyCard, { backgroundColor: colors.card }]}>
+                    <ActivityIndicator color={colors.success} size="large" />
+                    <Text style={[styles.emptySubtitle, styles.statusText, { color: colors.secondaryText }]}>
+                        {t.home.loading}
+                    </Text>
+                </View>
+            )}
+
+            {loadError && (
+                <View style={[styles.emptyCard, { backgroundColor: colors.card }]}>
+                    <Text style={[styles.emptyTitle, { color: colors.text }]}>{t.home.loadError}</Text>
+                    <TouchableOpacity
+                        style={[styles.emptyAddBtn, { backgroundColor: colors.success }]}
+                        onPress={() => void fetchTrips(true)}
+                    >
+                        <Text style={styles.emptyAddBtnText}>{t.home.retry}</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+
             {/* Last Trip Featured Card */}
             {lastTrip && (
                 <View>
@@ -130,7 +173,7 @@ export default function HomeScreen() {
             </View>
 
             {/* Empty state */}
-            {activeTrips.length === 0 && (
+            {!loading && !loadError && activeTrips.length === 0 && (
                 <View style={[styles.emptyCard, { backgroundColor: colors.card }]}>
                     <View style={[styles.emptyIconCircle, { backgroundColor: colors.success + '15' }]}>
                         <Ionicons name="airplane" size={36} color={colors.success} />
@@ -430,6 +473,10 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         marginBottom: 20,
         lineHeight: 20,
+    },
+    statusText: {
+        marginTop: 16,
+        marginBottom: 0,
     },
     emptyAddBtn: {
         paddingVertical: 14,
