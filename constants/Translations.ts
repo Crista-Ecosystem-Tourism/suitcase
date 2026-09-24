@@ -36,6 +36,9 @@ export const translations = {
         },
         tripDetails: {
             expenses: 'Expenses',
+            newTrip: 'New Trip',
+            createSuccess: 'Trip created successfully.',
+            createError: 'Could not create the trip. Check your connection and try again.',
             loadError: 'Could not load this trip. Check your connection and try again.',
             notFound: 'Trip not found.',
             retry: 'Try again',
@@ -75,6 +78,9 @@ export const translations = {
         },
         expenseForm: {
             addTitle: 'Add Expense',
+            createSuccess: 'Expense added successfully.',
+            createError: 'Could not add the expense. Check your connection and try again.',
+            tripRequired: 'Open a trip before adding an expense.',
             loadError: 'Could not load this expense. Check your connection and try again.',
             notFound: 'Expense not found.',
             retry: 'Try again',
@@ -194,6 +200,9 @@ export const translations = {
         },
         tripDetails: {
             expenses: 'Расходы',
+            newTrip: 'Новое путешествие',
+            createSuccess: 'Путешествие создано.',
+            createError: 'Не удалось создать путешествие. Проверьте соединение и попробуйте ещё раз.',
             loadError: 'Не удалось загрузить поездку. Проверьте соединение и попробуйте ещё раз.',
             notFound: 'Поездка не найдена.',
             retry: 'Повторить',
@@ -233,6 +242,9 @@ export const translations = {
         },
         expenseForm: {
             addTitle: 'Добавить расход',
+            createSuccess: 'Расход добавлен.',
+            createError: 'Не удалось добавить расход. Проверьте соединение и попробуйте ещё раз.',
+            tripRequired: 'Сначала откройте путешествие, чтобы добавить расход.',
             loadError: 'Не удалось загрузить расход. Проверьте соединение и попробуйте ещё раз.',
             notFound: 'Расход не найден.',
             retry: 'Повторить',
