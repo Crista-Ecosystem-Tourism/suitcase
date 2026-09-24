@@ -1,26 +1,33 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Alert, ActivityIndicator, StatusBar, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, StyleSheet, Alert, ActivityIndicator, StatusBar, TouchableOpacity, Platform } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { ExpenseForm } from '../../../components/ExpenseForm';
 import { getExpenseById, updateExpense, deleteExpense, Expense } from '../../../services/expenses';
 import { Ionicons } from '@expo/vector-icons';
+import { useLanguage } from '../../../hooks/useLanguage';
 
 export default function EditExpenseScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
+    const { t } = useLanguage();
     const [expense, setExpense] = useState<Expense | null>(null);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
-        if (id) loadExpense(id);
+        if (id) void loadExpense(id);
+        else setLoading(false);
     }, [id]);
 
     const loadExpense = async (expenseId: string) => {
+        setLoading(true);
+        setLoadError(false);
         try {
             const data = await getExpenseById(expenseId);
             setExpense(data);
         } catch (error) {
-            Alert.alert('Error', 'Failed to load expense');
+            console.error('Fetch expense for edit error:', error);
+            setLoadError(true);
         } finally {
             setLoading(false);
         }
@@ -57,7 +64,14 @@ export default function EditExpenseScreen() {
     };
 
     if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#007AFF" /></View>;
-    if (!expense) return null;
+    if (!expense) {
+        return (
+            <View style={styles.center}>
+                <Text>{loadError ? t.expenseForm.loadError : t.expenseForm.notFound}</Text>
+                {loadError && <Text accessibilityRole="button" onPress={() => id && void loadExpense(id)}>{t.expenseForm.retry}</Text>}
+            </View>
+        );
+    }
 
     return (
         <View style={styles.container}>

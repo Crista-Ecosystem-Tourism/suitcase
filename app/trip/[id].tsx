@@ -32,6 +32,7 @@ export default function TripDetailScreen() {
     const [trip, setTrip] = useState<Trip | null>(null);
     const [expenses, setExpenses] = useState<Expense[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [addingPhoto, setAddingPhoto] = useState(false);
     const [coordinates, setCoordinates] = useState<{ latitude: number, longitude: number } | null>(null);
@@ -41,12 +42,18 @@ export default function TripDetailScreen() {
     const [rates, setRates] = useState<Record<string, number>>({ RUB: 1 });
 
     const loadData = async () => {
-        if (!id) return;
+        if (!id) {
+            setLoading(false);
+            return;
+        }
+        setLoading(true);
+        setLoadError(false);
+        setTrip(null);
         try {
             const tripData = await getTripById(id);
             if (tripData) {
-                setTrip(tripData);
                 const expensesData = await getExpensesByTrip(id);
+                setTrip(tripData);
                 setExpenses(expensesData);
 
                 // Fetch exchange rates
@@ -69,7 +76,8 @@ export default function TripDetailScreen() {
                 geocodeDestination(tripData.city, tripData.country);
             }
         } catch (error) {
-            Alert.alert('Error', 'Failed to load details');
+            console.error('Fetch trip details error:', error);
+            setLoadError(true);
         } finally {
             setLoading(false);
         }
@@ -169,7 +177,18 @@ export default function TripDetailScreen() {
     }
 
     if (!trip) {
-        return <View style={[styles.center, { backgroundColor: colors.background }]}><Text style={[styles.errorText, { color: colors.secondaryText }]}>Trip not found</Text></View>;
+        return (
+            <View style={[styles.center, { backgroundColor: colors.background }]}>
+                <Text style={[styles.errorText, { color: colors.secondaryText }]}>
+                    {loadError ? t.tripDetails.loadError : t.tripDetails.notFound}
+                </Text>
+                {loadError && (
+                    <TouchableOpacity onPress={() => void loadData()}>
+                        <Text style={[styles.retryText, { color: colors.primary }]}>{t.tripDetails.retry}</Text>
+                    </TouchableOpacity>
+                )}
+            </View>
+        );
     }
 
     const locale = language === 'ru' ? 'ru-RU' : 'en-US';
@@ -378,6 +397,7 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F2F2F7' },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     errorText: { fontSize: 16, color: '#8E8E93' },
+    retryText: { fontSize: 16, fontWeight: '700', padding: 12 },
     section: {
         marginTop: 24,
         paddingHorizontal: 0,

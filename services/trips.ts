@@ -91,13 +91,9 @@ export const getTrips = async (): Promise<Trip[]> => {
 export const getAllTrips = getTrips;
 
 export const getTripById = async (id: string): Promise<Trip | null> => {
-    try {
-        const ws = await apiGet<{ trips: ServerTrip[] }>('/suitcase/workspace');
-        const found = ws.trips.find((t) => t.id === id);
-        return found ? fromServer(found) : null;
-    } catch {
-        return null;
-    }
+    const ws = await apiGet<{ trips: ServerTrip[] }>('/suitcase/workspace');
+    const found = ws.trips.find((t) => t.id === id);
+    return found ? fromServer(found) : null;
 };
 
 export const updateTrip = async (id: string, data: Partial<Trip>): Promise<void> => {

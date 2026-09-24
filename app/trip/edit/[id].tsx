@@ -1,27 +1,32 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { TripForm } from '../../../components/TripForm';
 import { getTripById, updateTrip, Trip } from '../../../services/trips';
+import { useLanguage } from '../../../hooks/useLanguage';
 
 export default function EditTripScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
+    const { t } = useLanguage();
     const [trip, setTrip] = useState<Trip | null>(null);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
-        if (id) {
-            loadTrip(id);
-        }
+        if (id) void loadTrip(id);
+        else setLoading(false);
     }, [id]);
 
     const loadTrip = async (tripId: string) => {
+        setLoading(true);
+        setLoadError(false);
         try {
             const data = await getTripById(tripId);
             setTrip(data);
         } catch (error: any) {
-            Alert.alert('Error', 'Failed to load trip');
+            console.error('Fetch trip for edit error:', error);
+            setLoadError(true);
         } finally {
             setLoading(false);
         }
@@ -45,7 +50,14 @@ export default function EditTripScreen() {
         return <View style={styles.center}><ActivityIndicator size="large" /></View>;
     }
 
-    if (!trip) return null;
+    if (!trip) {
+        return (
+            <View style={styles.center}>
+                <Text>{loadError ? t.tripDetails.loadError : t.tripDetails.notFound}</Text>
+                {loadError && <Text accessibilityRole="button" onPress={() => id && void loadTrip(id)}>{t.tripDetails.retry}</Text>}
+            </View>
+        );
+    }
 
     return (
         <View style={styles.container}>

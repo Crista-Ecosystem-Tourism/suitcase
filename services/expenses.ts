@@ -66,13 +66,9 @@ export const getExpensesByTrip = async (tripId: string): Promise<Expense[]> => {
 };
 
 export const getExpenseById = async (id: string): Promise<Expense | null> => {
-    try {
-        const ws = await apiGet<{ expenses: ServerExpense[] }>('/suitcase/workspace');
-        const found = ws.expenses.find((e) => e.id === id);
-        return found ? fromServer(found) : null;
-    } catch {
-        return null;
-    }
+    const ws = await apiGet<{ expenses: ServerExpense[] }>('/suitcase/workspace');
+    const found = ws.expenses.find((e) => e.id === id);
+    return found ? fromServer(found) : null;
 };
 
 export const updateExpense = async (id: string, data: Partial<Expense>): Promise<void> => {

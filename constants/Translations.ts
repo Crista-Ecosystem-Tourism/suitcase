@@ -36,6 +36,9 @@ export const translations = {
         },
         tripDetails: {
             expenses: 'Expenses',
+            loadError: 'Could not load this trip. Check your connection and try again.',
+            notFound: 'Trip not found.',
+            retry: 'Try again',
             totalSpent: 'Total Spent',
             noExpenses: 'No expenses yet',
             addExpense: 'Add Expense',
@@ -72,6 +75,9 @@ export const translations = {
         },
         expenseForm: {
             addTitle: 'Add Expense',
+            loadError: 'Could not load this expense. Check your connection and try again.',
+            notFound: 'Expense not found.',
+            retry: 'Try again',
             editTitle: 'Edit Expense',
             title: 'Title',
             titlePlaceholder: 'Expense Title (e.g. Dinner)',
@@ -180,6 +186,9 @@ export const translations = {
         },
         tripDetails: {
             expenses: 'Расходы',
+            loadError: 'Не удалось загрузить поездку. Проверьте соединение и попробуйте ещё раз.',
+            notFound: 'Поездка не найдена.',
+            retry: 'Повторить',
             totalSpent: 'Всего потрачено',
             noExpenses: 'Расходов пока нет',
             addExpense: 'Добавить расход',
@@ -216,6 +225,9 @@ export const translations = {
         },
         expenseForm: {
             addTitle: 'Добавить расход',
+            loadError: 'Не удалось загрузить расход. Проверьте соединение и попробуйте ещё раз.',
+            notFound: 'Расход не найден.',
+            retry: 'Повторить',
             editTitle: 'Редактировать расход',
             title: 'Название',
             titlePlaceholder: 'Название расхода (напр. Ужин)',
