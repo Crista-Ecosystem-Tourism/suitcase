@@ -86,6 +86,28 @@ def main() -> None:
         )
         expense.raise_for_status()
 
+        goal = client.post(
+            "/suitcase/goals",
+            headers=headers,
+            json={
+                "title": "Посетить три музея",
+                "current": 0,
+                "total": 3,
+                "color": "#336699",
+            },
+        )
+        goal.raise_for_status()
+        goal_id = goal.json()["id"]
+
+        updated_goal = client.patch(
+            f"/suitcase/goals/{goal_id}",
+            headers=headers,
+            json={"current": 1},
+        )
+        updated_goal.raise_for_status()
+        if updated_goal.json()["current"] != 1:
+            raise AssertionError("goal progress update was not returned by the API")
+
         workspace = client.get("/suitcase/workspace", headers=headers)
         workspace.raise_for_status()
         body = workspace.json()
@@ -94,8 +116,23 @@ def main() -> None:
         raise AssertionError("created trip was not returned by the authenticated workspace")
     if not any(item["id"] == expense.json()["id"] for item in body["expenses"]):
         raise AssertionError("created expense was not returned by the authenticated workspace")
-    if len(body["goals"]) != 4:
-        raise AssertionError("new Suitcase account did not receive the four default goals")
+    if len(body["goals"]) != 5:
+        raise AssertionError("workspace must contain four default goals plus the newly created goal")
+    saved_goal = next((item for item in body["goals"] if item["id"] == goal_id), None)
+    if not saved_goal or saved_goal["current"] != 1 or saved_goal["total"] != 3:
+        raise AssertionError("created and updated goal was not persisted in the authenticated workspace")
+
+    with TestClient(app) as client:
+        removed = client.delete(f"/suitcase/goals/{goal_id}", headers=headers)
+        removed.raise_for_status()
+        remaining = client.get("/suitcase/workspace", headers=headers)
+        remaining.raise_for_status()
+        remaining_goals = remaining.json()["goals"]
+
+    if any(item["id"] == goal_id for item in remaining_goals):
+        raise AssertionError("deleted goal remained in the authenticated workspace")
+    if len(remaining_goals) != 4:
+        raise AssertionError("deleting a custom goal changed the four default goals")
 
 
 if __name__ == "__main__":
