@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { useTheme } from '../../hooks/useTheme';
 import { useLanguage } from '../../hooks/useLanguage';
-import { createGoal, getGoals, updateGoal, type SuitcaseGoal } from '../../services/goals';
+import { createGoal, deleteGoal, getGoals, updateGoal, type SuitcaseGoal } from '../../services/goals';
 
 export default function GoalsScreen() {
     const { colors, isDark } = useTheme();
@@ -32,6 +32,7 @@ export default function GoalsScreen() {
     const [creating, setCreating] = useState(false);
     const [createError, setCreateError] = useState(false);
     const [updatingGoalId, setUpdatingGoalId] = useState<string | null>(null);
+    const [deletingGoalId, setDeletingGoalId] = useState<string | null>(null);
     const requestIdRef = useRef(0);
 
     const loadGoals = useCallback(async () => {
@@ -84,23 +85,41 @@ export default function GoalsScreen() {
                         />
                     </View>
                 </View>
-                <TouchableOpacity
-                    accessibilityRole="button"
-                    accessibilityLabel={t.goals.advance}
-                    disabled={goal.current >= goal.total || updatingGoalId !== null}
-                    onPress={() => void handleAdvanceGoal(goal)}
-                    style={[styles.advanceButton, { backgroundColor: colors.background }]}
-                >
-                    {updatingGoalId === goal.id ? (
-                        <ActivityIndicator size="small" color={colors.primary} />
-                    ) : (
-                        <Ionicons
-                            name={goal.current >= goal.total ? 'checkmark' : 'add'}
-                            size={22}
-                            color={goal.current >= goal.total ? colors.success : colors.primary}
-                        />
-                    )}
-                </TouchableOpacity>
+                <View style={styles.goalActions}>
+                    <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel={t.goals.advance}
+                        disabled={goal.current >= goal.total || updatingGoalId !== null || deletingGoalId !== null}
+                        onPress={() => void handleAdvanceGoal(goal)}
+                        style={[styles.advanceButton, { backgroundColor: colors.background }]}
+                    >
+                        {updatingGoalId === goal.id ? (
+                            <ActivityIndicator size="small" color={colors.primary} />
+                        ) : (
+                            <Ionicons
+                                name={goal.current >= goal.total ? 'checkmark' : 'add'}
+                                size={22}
+                                color={goal.current >= goal.total ? colors.success : colors.primary}
+                            />
+                        )}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel={t.goals.deleteTitle}
+                        disabled={updatingGoalId !== null || deletingGoalId !== null}
+                        onPress={() => Alert.alert(t.goals.deleteTitle, t.goals.deleteMessage, [
+                            { text: t.alerts.cancelBtn, style: 'cancel' },
+                            { text: t.alerts.deleteBtn, style: 'destructive', onPress: () => void handleDeleteGoal(goal) },
+                        ])}
+                        style={[styles.advanceButton, { backgroundColor: colors.background }]}
+                    >
+                        {deletingGoalId === goal.id ? (
+                            <ActivityIndicator size="small" color={colors.error} />
+                        ) : (
+                            <Ionicons name="trash-outline" size={19} color={colors.error} />
+                        )}
+                    </TouchableOpacity>
+                </View>
             </View>
         );
     };
@@ -109,7 +128,7 @@ export default function GoalsScreen() {
     const completedGoals = goals.length - activeGoals;
 
     const handleAdvanceGoal = async (goal: SuitcaseGoal) => {
-        if (updatingGoalId !== null || goal.current >= goal.total) return;
+        if (updatingGoalId !== null || deletingGoalId !== null || goal.current >= goal.total) return;
         setUpdatingGoalId(goal.id);
         try {
             const updated = await updateGoal(goal.id, { current: Math.min(goal.current + 1, goal.total) });
@@ -119,6 +138,20 @@ export default function GoalsScreen() {
             Alert.alert(t.alerts.error, t.goals.updateError);
         } finally {
             setUpdatingGoalId(null);
+        }
+    };
+
+    const handleDeleteGoal = async (goal: SuitcaseGoal) => {
+        if (updatingGoalId !== null || deletingGoalId !== null) return;
+        setDeletingGoalId(goal.id);
+        try {
+            await deleteGoal(goal.id);
+            setGoals(current => current.filter(item => item.id !== goal.id));
+        } catch (error) {
+            console.error('Delete goal error:', error);
+            Alert.alert(t.alerts.error, t.goals.deleteError);
+        } finally {
+            setDeletingGoalId(null);
         }
     };
 
@@ -400,6 +433,7 @@ const styles = StyleSheet.create({
     goalInfo: {
         flex: 1,
     },
+    goalActions: { flexDirection: 'row', alignItems: 'center', marginLeft: 8 },
     advanceButton: {
         width: 40,
         height: 40,

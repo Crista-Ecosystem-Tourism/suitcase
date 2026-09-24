@@ -166,6 +166,9 @@ export const translations = {
             validationError: 'Enter a goal name and a target greater than zero.',
             advance: 'Increase goal progress',
             updateError: 'Could not update goal progress. Please try again.',
+            deleteTitle: 'Delete goal?',
+            deleteMessage: 'This goal and its progress will be permanently removed.',
+            deleteError: 'Could not delete the goal. Please try again.',
         },
         archive: {
             subtitle: 'Your archived adventures will appear here.',
@@ -340,6 +343,9 @@ export const translations = {
             validationError: 'Укажите название и целевое значение больше нуля.',
             advance: 'Увеличить прогресс цели',
             updateError: 'Не удалось обновить прогресс цели. Попробуйте ещё раз.',
+            deleteTitle: 'Удалить цель?',
+            deleteMessage: 'Цель и её прогресс будут удалены без возможности восстановления.',
+            deleteError: 'Не удалось удалить цель. Попробуйте ещё раз.',
         },
         archive: {
             subtitle: 'Здесь будут ваши путешествия из архива.',
