@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from './api';
+import { apiGet, apiPatch, apiPost } from './api';
 
 export interface SuitcaseGoal {
     id: string;
@@ -15,4 +15,8 @@ export async function getGoals(): Promise<SuitcaseGoal[]> {
 
 export async function createGoal(goal: Omit<SuitcaseGoal, 'id'>): Promise<SuitcaseGoal> {
     return apiPost<SuitcaseGoal>('/suitcase/goals', goal);
+}
+
+export async function updateGoal(id: string, goal: Partial<Omit<SuitcaseGoal, 'id'>>): Promise<SuitcaseGoal> {
+    return apiPatch<SuitcaseGoal>(`/suitcase/goals/${id}`, goal);
 }

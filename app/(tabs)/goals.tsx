@@ -12,12 +12,13 @@ import {
     TouchableOpacity,
     KeyboardAvoidingView,
     Platform,
+    Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { useTheme } from '../../hooks/useTheme';
 import { useLanguage } from '../../hooks/useLanguage';
-import { createGoal, getGoals, type SuitcaseGoal } from '../../services/goals';
+import { createGoal, getGoals, updateGoal, type SuitcaseGoal } from '../../services/goals';
 
 export default function GoalsScreen() {
     const { colors, isDark } = useTheme();
@@ -30,6 +31,7 @@ export default function GoalsScreen() {
     const [draftTotal, setDraftTotal] = useState('');
     const [creating, setCreating] = useState(false);
     const [createError, setCreateError] = useState(false);
+    const [updatingGoalId, setUpdatingGoalId] = useState<string | null>(null);
     const requestIdRef = useRef(0);
 
     const loadGoals = useCallback(async () => {
@@ -82,12 +84,43 @@ export default function GoalsScreen() {
                         />
                     </View>
                 </View>
+                <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel={t.goals.advance}
+                    disabled={goal.current >= goal.total || updatingGoalId !== null}
+                    onPress={() => void handleAdvanceGoal(goal)}
+                    style={[styles.advanceButton, { backgroundColor: colors.background }]}
+                >
+                    {updatingGoalId === goal.id ? (
+                        <ActivityIndicator size="small" color={colors.primary} />
+                    ) : (
+                        <Ionicons
+                            name={goal.current >= goal.total ? 'checkmark' : 'add'}
+                            size={22}
+                            color={goal.current >= goal.total ? colors.success : colors.primary}
+                        />
+                    )}
+                </TouchableOpacity>
             </View>
         );
     };
 
     const activeGoals = goals.filter(goal => goal.current < goal.total).length;
     const completedGoals = goals.length - activeGoals;
+
+    const handleAdvanceGoal = async (goal: SuitcaseGoal) => {
+        if (updatingGoalId !== null || goal.current >= goal.total) return;
+        setUpdatingGoalId(goal.id);
+        try {
+            const updated = await updateGoal(goal.id, { current: Math.min(goal.current + 1, goal.total) });
+            setGoals(current => current.map(item => item.id === updated.id ? updated : item));
+        } catch (error) {
+            console.error('Update goal progress error:', error);
+            Alert.alert(t.alerts.error, t.goals.updateError);
+        } finally {
+            setUpdatingGoalId(null);
+        }
+    };
 
     const handleCreateGoal = async () => {
         const title = draftTitle.trim();
@@ -366,6 +399,14 @@ const styles = StyleSheet.create({
     },
     goalInfo: {
         flex: 1,
+    },
+    advanceButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginLeft: 12,
     },
     goalHeader: {
         flexDirection: 'row',

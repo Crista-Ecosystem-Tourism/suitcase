@@ -164,6 +164,8 @@ export const translations = {
             create: 'Create',
             createError: 'Could not create the goal. Please try again.',
             validationError: 'Enter a goal name and a target greater than zero.',
+            advance: 'Increase goal progress',
+            updateError: 'Could not update goal progress. Please try again.',
         },
         archive: {
             subtitle: 'Your archived adventures will appear here.',
@@ -336,6 +338,8 @@ export const translations = {
             create: 'Создать',
             createError: 'Не удалось создать цель. Попробуйте ещё раз.',
             validationError: 'Укажите название и целевое значение больше нуля.',
+            advance: 'Увеличить прогресс цели',
+            updateError: 'Не удалось обновить прогресс цели. Попробуйте ещё раз.',
         },
         archive: {
             subtitle: 'Здесь будут ваши путешествия из архива.',
