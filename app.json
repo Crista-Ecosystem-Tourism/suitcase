@@ -52,7 +52,8 @@
       "eas": {
         "projectId": "99d6a38a-4313-4d50-bfc1-ce05491ff628"
       },
-      "apiUrl": "https://api.crista.online/suitcase-api"
+      "apiUrl": "https://api.crista.online/suitcase-api",
+      "identityApiUrl": "https://crista.online/api"
     },
     "owner": "kiruxa",
     "plugins": [

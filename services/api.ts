@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ApiBaseUrl } from '../constants/Config';
+import { ApiBaseUrl, IdentityApiBaseUrl } from '../constants/Config';
+import { resolveApiUrl } from './apiRouting.js';
 
 const TOKEN_KEY = 'crista_token';
 const USER_KEY = 'crista_user';
@@ -19,6 +20,11 @@ export class ApiError extends Error {
         this.status = status;
         this.detail = detail;
     }
+}
+
+export interface AccountPreferences {
+    theme: 'light' | 'dark';
+    language: 'ru' | 'en';
 }
 
 let memoryToken: string | null = null;
@@ -73,8 +79,8 @@ export async function setStoredUser(user: CristaUser | null): Promise<void> {
     }
 }
 
-async function buildHeaders(extra?: Record<string, string>): Promise<Record<string, string>> {
-    const token = await getToken();
+async function buildHeaders(extra?: Record<string, string>, tokenOverride?: string): Promise<Record<string, string>> {
+    const token = tokenOverride ?? await getToken();
     const headers: Record<string, string> = {
         Accept: 'application/json',
         ...(extra || {}),
@@ -98,16 +104,20 @@ async function parse<T>(response: Response): Promise<T> {
     return (await response.json()) as T;
 }
 
-export async function apiGet<T>(path: string): Promise<T> {
-    const r = await fetch(`${ApiBaseUrl}${path}`, {
+function requestUrl(path: string): string {
+    return resolveApiUrl(path, ApiBaseUrl, IdentityApiBaseUrl);
+}
+
+export async function apiGet<T>(path: string, tokenOverride?: string): Promise<T> {
+    const r = await fetch(requestUrl(path), {
         method: 'GET',
-        headers: await buildHeaders(),
+        headers: await buildHeaders(undefined, tokenOverride),
     });
     return parse<T>(r);
 }
 
 export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
-    const r = await fetch(`${ApiBaseUrl}${path}`, {
+    const r = await fetch(requestUrl(path), {
         method: 'POST',
         headers: await buildHeaders({ 'Content-Type': 'application/json' }),
         body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -116,7 +126,7 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
 }
 
 export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
-    const r = await fetch(`${ApiBaseUrl}${path}`, {
+    const r = await fetch(requestUrl(path), {
         method: 'PATCH',
         headers: await buildHeaders({ 'Content-Type': 'application/json' }),
         body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -125,11 +135,28 @@ export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
 }
 
 export async function apiDelete<T = { ok: boolean }>(path: string): Promise<T> {
-    const r = await fetch(`${ApiBaseUrl}${path}`, {
+    const r = await fetch(requestUrl(path), {
         method: 'DELETE',
         headers: await buildHeaders(),
     });
     return parse<T>(r);
+}
+
+export async function apiPut<T>(path: string, body: unknown, tokenOverride?: string): Promise<T> {
+    const r = await fetch(requestUrl(path), {
+        method: 'PUT',
+        headers: await buildHeaders({ 'Content-Type': 'application/json' }, tokenOverride),
+        body: JSON.stringify(body),
+    });
+    return parse<T>(r);
+}
+
+export function getAccountPreferences(tokenOverride?: string): Promise<AccountPreferences> {
+    return apiGet<AccountPreferences>('/auth/preferences', tokenOverride);
+}
+
+export function saveAccountPreferences(preferences: AccountPreferences, tokenOverride?: string): Promise<AccountPreferences> {
+    return apiPut<AccountPreferences>('/auth/preferences', preferences, tokenOverride);
 }
 
 // --- Auth API ---

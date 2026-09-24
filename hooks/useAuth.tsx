@@ -8,6 +8,7 @@ import {
     logout as apiLogout,
     registerWithEmail,
 } from '../services/api';
+import { useLanguage } from './useLanguage';
 
 interface AuthContextValue {
     user: CristaUser | null;
@@ -20,6 +21,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+    const { syncLanguageFromAccount } = useLanguage();
     const [user, setUser] = useState<CristaUser | null>(null);
     const [initializing, setInitializing] = useState(true);
 
@@ -38,7 +40,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (!cancelled && cached) setUser(cached);
             try {
                 const fresh = await fetchMe();
-                if (!cancelled) setUser(fresh);
+                if (!cancelled) {
+                    setUser(fresh);
+                    void syncLanguageFromAccount();
+                }
             } catch {
                 if (!cancelled) {
                     await apiLogout();
@@ -51,17 +56,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [syncLanguageFromAccount]);
 
     const login = useCallback(async (email: string, password: string) => {
         const u = await loginWithEmail(email, password);
         setUser(u);
-    }, []);
+        await syncLanguageFromAccount();
+    }, [syncLanguageFromAccount]);
 
     const register = useCallback(async (email: string, password: string, name: string) => {
         const u = await registerWithEmail(email, password, name);
         setUser(u);
-    }, []);
+        await syncLanguageFromAccount();
+    }, [syncLanguageFromAccount]);
 
     const signOut = useCallback(async () => {
         await apiLogout();
