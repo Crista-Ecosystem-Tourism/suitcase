@@ -151,6 +151,12 @@ export const translations = {
             loadError: 'Goals could not be loaded. Check your connection and try again.',
             retry: 'Try again',
             empty: 'No goals yet.',
+            newGoal: 'Create a goal',
+            namePlaceholder: 'Goal name',
+            targetPlaceholder: 'Target value',
+            create: 'Create',
+            createError: 'Could not create the goal. Please try again.',
+            validationError: 'Enter a goal name and a target greater than zero.',
         }
     },
     ru: {
@@ -303,6 +309,12 @@ export const translations = {
             loadError: 'Не удалось загрузить цели. Проверьте соединение и попробуйте ещё раз.',
             retry: 'Повторить',
             empty: 'Целей пока нет.',
+            newGoal: 'Новая цель',
+            namePlaceholder: 'Название цели',
+            targetPlaceholder: 'Целевое значение',
+            create: 'Создать',
+            createError: 'Не удалось создать цель. Попробуйте ещё раз.',
+            validationError: 'Укажите название и целевое значение больше нуля.',
         }
     }
 };

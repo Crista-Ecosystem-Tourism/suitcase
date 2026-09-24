@@ -7,12 +7,17 @@ import {
     SafeAreaView,
     StatusBar,
     ActivityIndicator,
+    Modal,
+    TextInput,
+    TouchableOpacity,
+    KeyboardAvoidingView,
+    Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { useTheme } from '../../hooks/useTheme';
 import { useLanguage } from '../../hooks/useLanguage';
-import { getGoals, type SuitcaseGoal } from '../../services/goals';
+import { createGoal, getGoals, type SuitcaseGoal } from '../../services/goals';
 
 export default function GoalsScreen() {
     const { colors, isDark } = useTheme();
@@ -20,6 +25,11 @@ export default function GoalsScreen() {
     const [goals, setGoals] = useState<SuitcaseGoal[]>([]);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(false);
+    const [createOpen, setCreateOpen] = useState(false);
+    const [draftTitle, setDraftTitle] = useState('');
+    const [draftTotal, setDraftTotal] = useState('');
+    const [creating, setCreating] = useState(false);
+    const [createError, setCreateError] = useState(false);
     const requestIdRef = useRef(0);
 
     const loadGoals = useCallback(async () => {
@@ -79,12 +89,47 @@ export default function GoalsScreen() {
     const activeGoals = goals.filter(goal => goal.current < goal.total).length;
     const completedGoals = goals.length - activeGoals;
 
+    const handleCreateGoal = async () => {
+        const title = draftTitle.trim();
+        const total = Number(draftTotal);
+        if (!title || !Number.isInteger(total) || total < 1) {
+            setCreateError(true);
+            return;
+        }
+
+        setCreating(true);
+        setCreateError(false);
+        try {
+            const goal = await createGoal({ title, current: 0, total, color: colors.primary });
+            setGoals(current => [...current, goal]);
+            setDraftTitle('');
+            setDraftTotal('');
+            setCreateOpen(false);
+        } catch (error) {
+            console.error('Create goal error:', error);
+            setCreateError(true);
+        } finally {
+            setCreating(false);
+        }
+    };
+
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
             <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
             <View style={styles.header}>
                 <Text style={[styles.title, { color: colors.text }]}>{t.tabs.goals || 'Goals'}</Text>
+                <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel={t.goals.addGoalBtn}
+                    style={[styles.addBtn, { backgroundColor: colors.primary }]}
+                    onPress={() => {
+                        setCreateError(false);
+                        setCreateOpen(true);
+                    }}
+                >
+                    <Ionicons name="add" size={24} color="#FFF" />
+                </TouchableOpacity>
             </View>
 
             <ScrollView
@@ -128,6 +173,67 @@ export default function GoalsScreen() {
 
                 <View style={{ height: 100 }} />
             </ScrollView>
+
+            <Modal
+                visible={createOpen}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setCreateOpen(false)}
+            >
+                <KeyboardAvoidingView
+                    style={styles.modalOverlay}
+                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                >
+                    <View style={[styles.modalCard, { backgroundColor: colors.card }]}>
+                        <Text style={[styles.modalTitle, { color: colors.text }]}>{t.goals.newGoal}</Text>
+                        <TextInput
+                            value={draftTitle}
+                            onChangeText={setDraftTitle}
+                            placeholder={t.goals.namePlaceholder}
+                            placeholderTextColor={colors.secondaryText}
+                            style={[styles.input, { color: colors.text, borderColor: colors.border }]}
+                            maxLength={80}
+                            editable={!creating}
+                        />
+                        <TextInput
+                            value={draftTotal}
+                            onChangeText={setDraftTotal}
+                            placeholder={t.goals.targetPlaceholder}
+                            placeholderTextColor={colors.secondaryText}
+                            keyboardType="number-pad"
+                            style={[styles.input, { color: colors.text, borderColor: colors.border }]}
+                            editable={!creating}
+                        />
+                        {createError && (
+                            <Text style={[styles.formError, { color: colors.error }]}>
+                                {!draftTitle.trim() || !Number.isInteger(Number(draftTotal)) || Number(draftTotal) < 1
+                                    ? t.goals.validationError
+                                    : t.goals.createError}
+                            </Text>
+                        )}
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity
+                                accessibilityRole="button"
+                                onPress={() => setCreateOpen(false)}
+                                disabled={creating}
+                                style={styles.modalAction}
+                            >
+                                <Text style={{ color: colors.secondaryText }}>{t.alerts.cancelBtn}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                accessibilityRole="button"
+                                onPress={() => void handleCreateGoal()}
+                                disabled={creating}
+                                style={[styles.modalAction, styles.primaryAction, { backgroundColor: colors.primary }]}
+                            >
+                                {creating
+                                    ? <ActivityIndicator color="#FFF" />
+                                    : <Text style={styles.primaryActionText}>{t.goals.create}</Text>}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </KeyboardAvoidingView>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -147,6 +253,13 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 34,
         fontWeight: 'bold',
+    },
+    addBtn: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     scrollContent: {
         padding: 16,
@@ -186,6 +299,54 @@ const styles = StyleSheet.create({
     },
     retryText: {
         padding: 8,
+        fontWeight: '700',
+    },
+    modalOverlay: {
+        flex: 1,
+        justifyContent: 'flex-end',
+        backgroundColor: 'rgba(0,0,0,0.4)',
+    },
+    modalCard: {
+        padding: 20,
+        paddingBottom: 32,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        gap: 12,
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: '700',
+        marginBottom: 4,
+    },
+    input: {
+        minHeight: 48,
+        borderWidth: 1,
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        fontSize: 16,
+    },
+    formError: {
+        fontSize: 13,
+    },
+    modalActions: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        gap: 12,
+        marginTop: 4,
+    },
+    modalAction: {
+        minWidth: 96,
+        minHeight: 44,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 14,
+        borderRadius: 12,
+    },
+    primaryAction: {
+        minWidth: 120,
+    },
+    primaryActionText: {
+        color: '#FFF',
         fontWeight: '700',
     },
     goalCard: {
