@@ -119,6 +119,7 @@ export default function TripDetailScreen() {
                 setTrip({ ...trip, photos: newPhotos });
             } catch (error) {
                 console.error(error);
+                Alert.alert(t.alerts.error, t.alerts.updateError);
             } finally {
                 setAddingPhoto(false);
             }
@@ -142,7 +143,7 @@ export default function TripDetailScreen() {
                                 router.replace('/');
                             } catch (error) {
                                 console.error("Failed to delete trip:", error);
-                                Alert.alert("Error", "Failed to delete trip.");
+                                Alert.alert(t.alerts.error, t.alerts.deleteError);
                             } finally {
                                 setDeleting(false);
                             }
@@ -162,6 +163,7 @@ export default function TripDetailScreen() {
             Alert.alert(t.alerts.ok, newArchivedState ? t.tripDetails.archiveTrip : t.tripDetails.unarchiveTrip);
         } catch (error) {
             console.error(error);
+            Alert.alert(t.alerts.error, t.alerts.updateError);
         }
     };
 

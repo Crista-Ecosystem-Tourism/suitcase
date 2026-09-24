@@ -13,6 +13,7 @@ export default function EditExpenseScreen() {
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [deleting, setDeleting] = useState(false);
 
     useEffect(() => {
         if (id) void loadExpense(id);
@@ -38,25 +39,33 @@ export default function EditExpenseScreen() {
         setSaving(true);
         try {
             await updateExpense(id, updatedData);
-            Alert.alert('Success', 'Expense updated!');
+            Alert.alert(t.alerts.ok, t.alerts.saveSuccess);
             router.back();
-        } catch (error: any) {
-            Alert.alert('Error', error.message);
+        } catch (error) {
+            console.error('Update expense error:', error);
+            Alert.alert(t.alerts.error, error instanceof Error ? error.message : t.alerts.updateError);
         } finally {
             setSaving(false);
         }
     };
 
     const handleDelete = () => {
-        Alert.alert("Delete Expense", "Are you sure?", [
-            { text: "Cancel", style: "cancel" },
+        Alert.alert(t.alerts.confirmDelete, t.alerts.deleteSub, [
+            { text: t.alerts.cancelBtn, style: "cancel" },
             {
-                text: "Delete",
+                text: t.alerts.deleteBtn,
                 style: "destructive",
                 onPress: async () => {
-                    if (id) {
+                    if (!id) return;
+                    setDeleting(true);
+                    try {
                         await deleteExpense(id);
                         router.back();
+                    } catch (error) {
+                        console.error('Delete expense error:', error);
+                        Alert.alert(t.alerts.error, t.alerts.deleteError);
+                    } finally {
+                        setDeleting(false);
                     }
                 }
             }
@@ -83,8 +92,10 @@ export default function EditExpenseScreen() {
                 tripId={expense.trip_id}
             />
             {/* Кнопка удаления в футере или через навигацию? Добавим кнопку в форму или здесь */}
-            <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
-                <Ionicons name="trash-outline" size={20} color="#FF3B30" />
+            <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete} disabled={deleting}>
+                {deleting
+                    ? <ActivityIndicator size="small" color="#FF3B30" />
+                    : <Ionicons name="trash-outline" size={20} color="#FF3B30" />}
                 <StatusBar barStyle="dark-content" />
             </TouchableOpacity>
         </View>

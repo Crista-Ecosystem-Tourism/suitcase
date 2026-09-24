@@ -109,6 +109,8 @@ export const translations = {
             cancelBtn: 'Cancel',
             saveSuccess: 'Saved successfully',
             error: 'Error',
+            deleteError: 'Could not delete this item. Please try again.',
+            updateError: 'Could not save this change. Please try again.',
             ok: 'OK',
         },
         currencies: {
@@ -259,6 +261,8 @@ export const translations = {
             cancelBtn: 'Отмена',
             saveSuccess: 'Успешно сохранено',
             error: 'Ошибка',
+            deleteError: 'Не удалось удалить объект. Попробуйте ещё раз.',
+            updateError: 'Не удалось сохранить изменение. Попробуйте ещё раз.',
             ok: 'ОК',
         },
         currencies: {

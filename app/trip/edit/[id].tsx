@@ -37,10 +37,11 @@ export default function EditTripScreen() {
         setSaving(true);
         try {
             await updateTrip(id, updatedData);
-            Alert.alert('Success', 'Trip updated!');
+            Alert.alert(t.alerts.ok, t.alerts.saveSuccess);
             router.back();
-        } catch (error: any) {
-            Alert.alert('Error', error.message);
+        } catch (error) {
+            console.error('Update trip error:', error);
+            Alert.alert(t.alerts.error, error instanceof Error ? error.message : t.alerts.updateError);
         } finally {
             setSaving(false);
         }
