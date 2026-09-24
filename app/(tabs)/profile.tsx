@@ -57,6 +57,31 @@ export default function ProfileScreen() {
                 </View>
 
                 <View style={styles.section}>
+                    <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>{t.profile.travelData}</Text>
+                    <View style={[styles.card, { backgroundColor: colors.card }]}>
+                        <TouchableOpacity
+                            accessibilityRole="button"
+                            style={styles.menuItem}
+                            onPress={() => router.push('/(tabs)/goals')}
+                        >
+                            <Ionicons name="flag-outline" size={22} color={colors.primary} />
+                            <Text style={[styles.menuText, { color: colors.text }]}>{t.tabs.goals}</Text>
+                            <Ionicons name="chevron-forward" size={18} color={colors.border} />
+                        </TouchableOpacity>
+                        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+                        <TouchableOpacity
+                            accessibilityRole="button"
+                            style={styles.menuItem}
+                            onPress={() => router.push('/(tabs)/archive')}
+                        >
+                            <Ionicons name="archive-outline" size={22} color={colors.primary} />
+                            <Text style={[styles.menuText, { color: colors.text }]}>{t.tabs.archive}</Text>
+                            <Ionicons name="chevron-forward" size={18} color={colors.border} />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
+                <View style={styles.section}>
                     <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>{t.profile.account}</Text>
                     <View style={[styles.card, { backgroundColor: colors.card }]}>
                         <TouchableOpacity style={styles.menuItem}>

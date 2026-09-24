@@ -125,6 +125,7 @@ export const translations = {
         },
         profile: {
             settings: 'Settings',
+            travelData: 'Travel data',
             language: 'Language',
             theme: 'Theme',
             light: 'Light',
@@ -296,6 +297,7 @@ export const translations = {
         },
         profile: {
             settings: 'Настройки',
+            travelData: 'Данные путешествий',
             language: 'Язык',
             theme: 'Тема',
             light: 'Светлая',
