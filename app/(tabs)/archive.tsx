@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, StatusBar, FlatList, RefreshControl, TouchableOpacity } from 'react-native';
+import React, { useState, useCallback, useRef } from 'react';
+import { View, Text, StyleSheet, StatusBar, FlatList, RefreshControl, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getAllTrips, Trip } from '../../services/trips';
 import { useLanguage } from '../../hooks/useLanguage';
@@ -10,27 +10,46 @@ export default function ArchiveScreen() {
     const { colors, isDark } = useTheme();
     const { t } = useLanguage();
     const [trips, setTrips] = useState<Trip[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+    const requestIdRef = useRef(0);
+    const focusedRef = useRef(false);
 
-    const fetchTrips = async () => {
+    const fetchTrips = useCallback(async (showLoading: boolean) => {
+        const requestId = ++requestIdRef.current;
+        if (showLoading) setLoading(true);
+        setLoadError(false);
         try {
             const data = await getAllTrips();
-            setTrips(data.filter(t => t.isArchived));
+            if (focusedRef.current && requestIdRef.current === requestId) {
+                setTrips(data.filter(t => t.isArchived));
+            }
         } catch (error) {
-            console.error(error);
+            console.error('Fetch archived trips error:', error);
+            if (focusedRef.current && requestIdRef.current === requestId) setLoadError(true);
+        } finally {
+            if (focusedRef.current && requestIdRef.current === requestId) {
+                setLoading(false);
+                setRefreshing(false);
+            }
         }
-    };
+    }, []);
 
     useFocusEffect(
         useCallback(() => {
-            fetchTrips();
-        }, [])
+            focusedRef.current = true;
+            void fetchTrips(true);
+            return () => {
+                focusedRef.current = false;
+                requestIdRef.current += 1;
+            };
+        }, [fetchTrips])
     );
 
     const onRefresh = async () => {
         setRefreshing(true);
-        await fetchTrips();
-        setRefreshing(false);
+        await fetchTrips(false);
     };
 
     return (
@@ -40,8 +59,19 @@ export default function ArchiveScreen() {
                 data={trips}
                 keyExtractor={(item) => item.id!}
                 contentContainerStyle={styles.list}
-                refreshing={refreshing}
-                onRefresh={onRefresh}
+                ListHeaderComponent={loadError && trips.length > 0 ? (
+                    <View style={[styles.errorNotice, { backgroundColor: colors.card }]}>
+                        <Text style={[styles.subtitle, { color: colors.text }]}>{t.archive.loadError}</Text>
+                        <TouchableOpacity
+                            accessibilityRole="button"
+                            onPress={() => void fetchTrips(true)}
+                            style={[styles.retryButton, { backgroundColor: colors.primary }]}
+                        >
+                            <Text style={styles.retryText}>{t.archive.retry}</Text>
+                        </TouchableOpacity>
+                    </View>
+                ) : null}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
                 renderItem={({ item }) => (
                     <TouchableOpacity
                         style={[styles.card, { backgroundColor: colors.card }]}
@@ -56,13 +86,31 @@ export default function ArchiveScreen() {
                 )}
                 ListEmptyComponent={
                     <View style={styles.empty}>
-                        <View style={[styles.iconContainer, { backgroundColor: colors.card }]}>
-                            <Ionicons name="archive-outline" size={48} color={colors.secondaryText} />
-                        </View>
-                        <Text style={[styles.title, { color: colors.text }]}>{t.tabs.archive}</Text>
-                        <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
-                            Your archived adventures will appear here.
-                        </Text>
+                        {loading ? (
+                            <>
+                                <ActivityIndicator size="large" color={colors.primary} />
+                                <Text style={[styles.subtitle, { color: colors.secondaryText }]}>{t.archive.loading}</Text>
+                            </>
+                        ) : loadError ? (
+                            <>
+                                <Text style={[styles.subtitle, { color: colors.text }]}>{t.archive.loadError}</Text>
+                                <TouchableOpacity
+                                    accessibilityRole="button"
+                                    onPress={() => void fetchTrips(true)}
+                                    style={[styles.retryButton, { backgroundColor: colors.primary }]}
+                                >
+                                    <Text style={styles.retryText}>{t.archive.retry}</Text>
+                                </TouchableOpacity>
+                            </>
+                        ) : (
+                            <>
+                                <View style={[styles.iconContainer, { backgroundColor: colors.card }]}>
+                                    <Ionicons name="archive-outline" size={48} color={colors.secondaryText} />
+                                </View>
+                                <Text style={[styles.title, { color: colors.text }]}>{t.tabs.archive}</Text>
+                                <Text style={[styles.subtitle, { color: colors.secondaryText }]}>{t.archive.empty}</Text>
+                            </>
+                        )}
                     </View>
                 }
             />
@@ -91,6 +139,7 @@ const styles = StyleSheet.create({
         paddingTop: 100,
         paddingHorizontal: 40
     },
+    errorNotice: { alignItems: 'center', padding: 16, borderRadius: 16, marginBottom: 16 },
     iconContainer: {
         width: 80,
         height: 80,
@@ -108,5 +157,7 @@ const styles = StyleSheet.create({
         fontSize: 16,
         textAlign: 'center',
         lineHeight: 22
-    }
+    },
+    retryButton: { marginTop: 16, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12 },
+    retryText: { color: '#FFF', fontWeight: '700' }
 });

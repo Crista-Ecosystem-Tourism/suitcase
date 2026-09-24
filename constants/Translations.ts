@@ -163,6 +163,13 @@ export const translations = {
             create: 'Create',
             createError: 'Could not create the goal. Please try again.',
             validationError: 'Enter a goal name and a target greater than zero.',
+        },
+        archive: {
+            subtitle: 'Your archived adventures will appear here.',
+            loading: 'Loading archived trips…',
+            loadError: 'Could not load archived trips. Check your connection and try again.',
+            empty: 'No archived trips yet.',
+            retry: 'Try again',
         }
     },
     ru: {
@@ -327,6 +334,13 @@ export const translations = {
             create: 'Создать',
             createError: 'Не удалось создать цель. Попробуйте ещё раз.',
             validationError: 'Укажите название и целевое значение больше нуля.',
+        },
+        archive: {
+            subtitle: 'Здесь будут ваши путешествия из архива.',
+            loading: 'Загружаем архивные путешествия…',
+            loadError: 'Не удалось загрузить архив. Проверьте соединение и попробуйте ещё раз.',
+            empty: 'В архиве пока нет путешествий.',
+            retry: 'Повторить',
         }
     }
 };
