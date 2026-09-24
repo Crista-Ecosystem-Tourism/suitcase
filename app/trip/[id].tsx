@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useCallback, useRef, useState, useMemo } from 'react';
 import {
     View,
     Text,
@@ -12,7 +12,7 @@ import {
     Platform,
     Image
 } from 'react-native';
-import { useLocalSearchParams, router } from 'expo-router';
+import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { getTripById, deleteTrip, Trip, updateTrip } from '../../services/trips';
 import { fetchExchangeRates, convertCurrency, getCurrencySymbol } from '../../services/currencies';
 import * as ImagePicker from 'expo-image-picker';
@@ -38,26 +38,45 @@ export default function TripDetailScreen() {
     const [coordinates, setCoordinates] = useState<{ latitude: number, longitude: number } | null>(null);
     const [routePoints, setRoutePoints] = useState<{ latitude: number, longitude: number, name?: string }[]>([]);
     const [geocoding, setGeocoding] = useState(false);
+    const requestIdRef = useRef(0);
+    const focusedRef = useRef(false);
 
     const [rates, setRates] = useState<Record<string, number>>({ RUB: 1 });
 
-    const loadData = async () => {
+    const geocodeDestination = async (city: string, country: string, requestId: number) => {
+        setGeocoding(true);
+        try {
+            const result = await Location.geocodeAsync(`${city}, ${country}`);
+            if (focusedRef.current && requestIdRef.current === requestId && result.length > 0) {
+                setCoordinates({ latitude: result[0].latitude, longitude: result[0].longitude });
+            }
+        } catch (error) {
+            console.log('Geocoding error:', error);
+        } finally {
+            if (focusedRef.current && requestIdRef.current === requestId) setGeocoding(false);
+        }
+    };
+
+    const loadData = useCallback(async () => {
         if (!id) {
             setLoading(false);
             return;
         }
+        const requestId = ++requestIdRef.current;
         setLoading(true);
         setLoadError(false);
-        setTrip(null);
         try {
             const tripData = await getTripById(id);
+            if (!focusedRef.current || requestIdRef.current !== requestId) return;
             if (tripData) {
                 const expensesData = await getExpensesByTrip(id);
+                if (!focusedRef.current || requestIdRef.current !== requestId) return;
                 setTrip(tripData);
                 setExpenses(expensesData);
 
                 // Fetch exchange rates
                 const latestRates = await fetchExchangeRates('RUB');
+                if (!focusedRef.current || requestIdRef.current !== requestId) return;
                 setRates(latestRates);
 
                 // Parse route_json if exists
@@ -73,37 +92,29 @@ export default function TripDetailScreen() {
                 }
 
                 // Geocode city and country to get coordinates for the map
-                geocodeDestination(tripData.city, tripData.country);
+                void geocodeDestination(tripData.city, tripData.country, requestId);
+            } else {
+                setTrip(null);
+                setExpenses([]);
             }
         } catch (error) {
             console.error('Fetch trip details error:', error);
-            setLoadError(true);
+            if (focusedRef.current && requestIdRef.current === requestId) setLoadError(true);
         } finally {
-            setLoading(false);
+            if (focusedRef.current && requestIdRef.current === requestId) setLoading(false);
         }
-    };
-
-    const geocodeDestination = async (city: string, country: string) => {
-        setGeocoding(true);
-        try {
-            const address = `${city}, ${country}`;
-            const result = await Location.geocodeAsync(address);
-            if (result.length > 0) {
-                setCoordinates({
-                    latitude: result[0].latitude,
-                    longitude: result[0].longitude
-                });
-            }
-        } catch (error) {
-            console.log('Geocoding error:', error);
-        } finally {
-            setGeocoding(false);
-        }
-    };
-
-    useEffect(() => {
-        loadData();
     }, [id]);
+
+    useFocusEffect(
+        useCallback(() => {
+            focusedRef.current = true;
+            void loadData();
+            return () => {
+                focusedRef.current = false;
+                requestIdRef.current += 1;
+            };
+        }, [loadData])
+    );
 
     const addPhoto = async () => {
         const result = await ImagePicker.launchImageLibraryAsync({
