@@ -13,11 +13,14 @@ import subprocess
 import sys
 import tempfile
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import jwt
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.security import JWT_ALG, JWT_SECRET
 
 
 AGENT_AUTH_SCRIPT = """
@@ -62,6 +65,25 @@ def main() -> None:
 
     with TestClient(app) as client:
         headers = {"Authorization": f"Bearer {token}"}
+        owner_id = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])["sub"]
+        now = datetime.now(timezone.utc)
+        stamp_ticket_claims = {
+            "sub": owner_id,
+            "iss": "crista-ai-agent",
+            "aud": "crista-suitcase-mini-site",
+            "purpose": "trip-mini-site-stamps",
+            "iat": int(now.timestamp()),
+            "exp": int((now + timedelta(minutes=5)).timestamp()),
+            "stamps": [{
+                "key": "smoke-earned-stamp",
+                "title": "Проверенный штамп",
+                "earned_at": now.isoformat(),
+                "fact": "Факт из опубликованной ревизии.",
+                "source_label": "Официальный источник",
+                "source_url": "https://example.test/fact?tracking=remove#section",
+            }],
+        }
+        stamp_ticket = jwt.encode(stamp_ticket_claims, JWT_SECRET, algorithm=JWT_ALG)
         trip = client.post(
             "/suitcase/trips",
             headers=headers,
@@ -113,7 +135,19 @@ def main() -> None:
         if updated_goal.json()["current"] != 1:
             raise AssertionError("goal progress update was not returned by the API")
 
-        completion = client.post(f"/suitcase/trips/{trip_id}/complete", headers=headers)
+        wrong_owner_claims = {**stamp_ticket_claims, "sub": uuid.uuid4().hex}
+        wrong_owner_ticket = jwt.encode(wrong_owner_claims, JWT_SECRET, algorithm=JWT_ALG)
+        rejected_ticket = client.post(
+            f"/suitcase/trips/{trip_id}/complete", headers=headers,
+            json={"game_stamp_ticket": wrong_owner_ticket},
+        )
+        if rejected_ticket.status_code != 400:
+            raise AssertionError("Suitcase must reject a stamp ticket issued for another owner")
+
+        completion = client.post(
+            f"/suitcase/trips/{trip_id}/complete", headers=headers,
+            json={"game_stamp_ticket": stamp_ticket},
+        )
         completion.raise_for_status()
         draft = completion.json()
         if draft["published"] or not draft["draft_ready"] or draft["slug"] is not None:
@@ -127,6 +161,11 @@ def main() -> None:
             raise AssertionError("owner draft is missing the allow-listed route point")
         if "user_id" in draft_snapshot or "expenses" in draft_snapshot:
             raise AssertionError("owner draft contains private account or expense data")
+        shared_stamps = draft_snapshot["game_stamps"]
+        if len(shared_stamps) != 1 or shared_stamps[0]["fact"] != "Факт из опубликованной ревизии.":
+            raise AssertionError("owner draft did not persist the verified game stamp")
+        if shared_stamps[0]["source_url"] != "https://example.test/fact":
+            raise AssertionError("shared fact source URL was not sanitized")
 
         owner_preview = client.get(f"/suitcase/trips/{trip_id}/mini-site", headers=headers)
         owner_preview.raise_for_status()
@@ -146,7 +185,7 @@ def main() -> None:
         published = client.post(
             f"/suitcase/trips/{trip_id}/mini-site",
             headers=headers,
-            json={"visibility": "link", "consent_to_publish": True},
+            json={"visibility": "link", "consent_to_publish": True, "game_stamp_ticket": stamp_ticket},
         )
         published.raise_for_status()
         publication = published.json()
