@@ -29,6 +29,7 @@ def _owner_payload(
             "completed_at": trip.completed_at.isoformat() if trip.completed_at else None,
             "draft_snapshot": None,
             "preview_snapshot": preview_snapshot or build_trip_snapshot(trip),
+            "published_snapshot": None,
         }
     published = publication.slug is not None and publication.consented_at is not None
     return {
@@ -39,6 +40,7 @@ def _owner_payload(
         "consented_at": publication.consented_at.isoformat() if publication.consented_at else None,
         "completed_at": trip.completed_at.isoformat() if trip.completed_at else None,
         "draft_snapshot": publication.snapshot if not published else None,
+        "published_snapshot": publication.snapshot if published else None,
         # Active links can be refreshed against current trip data after a new
         # review/consent; keep the current link live until that write commits.
         "preview_snapshot": preview_snapshot or (build_trip_snapshot(trip) if published else publication.snapshot),

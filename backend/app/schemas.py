@@ -106,6 +106,7 @@ class MiniSiteOwnerOut(BaseModel):
     completed_at: Optional[str] = None
     draft_snapshot: Optional[dict] = None
     preview_snapshot: Optional[dict] = None
+    published_snapshot: Optional[dict] = None
 
 
 class PublicMiniSiteOut(BaseModel):
