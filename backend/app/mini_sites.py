@@ -180,6 +180,8 @@ async def revoke_mini_site(db: AsyncSession, trip_id: str, user_id: str) -> bool
 async def read_public_mini_site(db: AsyncSession, slug: str) -> dict[str, Any] | None:
     publication = await db.scalar(select(SuitcaseTripPublication).where(
         SuitcaseTripPublication.slug == slug,
+        SuitcaseTripPublication.visibility.in_(("public", "link")),
+        SuitcaseTripPublication.consented_at.is_not(None),
         SuitcaseTripPublication.revoked_at.is_(None),
     ))
     if publication is None:

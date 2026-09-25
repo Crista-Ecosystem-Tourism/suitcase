@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from urllib.parse import urlsplit
 
-from fastapi import Depends, FastAPI, HTTPException, Path, Response
+from fastapi import Depends, FastAPI, HTTPException, Path, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.status import HTTP_400_BAD_REQUEST, HTTP_401_UNAUTHORIZED, HTTP_404_NOT_FOUND, HTTP_409_CONFLICT
 
@@ -39,6 +41,7 @@ from app.services import (
     workspace,
 )
 from app.mini_sites import complete_trip, get_mini_site, publish_mini_site, read_public_mini_site, revoke_mini_site
+from app.mini_site_html import render_missing_mini_site_html, render_public_mini_site_html
 
 
 @asynccontextmanager
@@ -174,6 +177,43 @@ async def get_public_mini_site(
     response.headers["Cache-Control"] = "private, no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"
     return PublicMiniSiteOut(**publication)
+
+
+@app.get("/public-mini-site/{slug}/html", response_class=HTMLResponse)
+async def get_public_mini_site_html(
+    request: Request,
+    slug: str = Path(min_length=32, max_length=64, pattern=r"^[A-Za-z0-9_-]+$"),
+    db: AsyncSession = Depends(get_db),
+) -> HTMLResponse:
+    publication = await read_public_mini_site(db, slug)
+    headers = {
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Content-Security-Policy": "default-src 'none'; img-src https:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    }
+    if publication is None:
+        return HTMLResponse(render_missing_mini_site_html(), status_code=HTTP_404_NOT_FOUND, headers=headers)
+
+    host = request.headers.get("host", "").lower()
+    canonical_url = None
+    if publication.get("visibility") == "public":
+        for origin in get_cors_origins():
+            parsed = urlsplit(origin)
+            if (
+                parsed.scheme in {"http", "https"}
+                and parsed.netloc.lower() == host
+                and parsed.path in {"", "/"}
+                and not parsed.username
+                and not parsed.password
+            ):
+                canonical_url = f"{parsed.scheme}://{parsed.netloc}/t/{slug}"
+                break
+    return HTMLResponse(
+        render_public_mini_site_html(publication, canonical_url=canonical_url),
+        status_code=200,
+        headers=headers,
+    )
 
 
 @app.post("/suitcase/trips/{trip_id}/expenses", response_model=SuitcaseExpenseOut)

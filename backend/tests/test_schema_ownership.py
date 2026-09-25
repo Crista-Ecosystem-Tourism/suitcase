@@ -39,6 +39,7 @@ class SchemaOwnershipTests(unittest.TestCase):
         self.assertIn("/suitcase/trips/{trip_id}/mini-site", paths)
         self.assertIn("/suitcase/trips/{trip_id}/complete", paths)
         self.assertIn("/t/{slug}", paths)
+        self.assertIn("/public-mini-site/{slug}/html", paths)
 
     def test_mini_site_migration_cascades_with_trip_and_stores_consent_snapshot(self):
         migration = (

@@ -199,6 +199,14 @@ def main() -> None:
             raise AssertionError("published page differs from the reviewed owner snapshot")
         if "expenses" in public_page.json()["snapshot"] or "user_id" in public_page.json()["snapshot"]:
             raise AssertionError("public snapshot contains private account or expense data")
+        server_rendered = client.get(f"/public-mini-site/{publication['slug']}/html")
+        server_rendered.raise_for_status()
+        if "text/html" not in server_rendered.headers.get("content-type", ""):
+            raise AssertionError("crawler route did not return HTML")
+        if 'name="robots" content="noindex, nofollow"' not in server_rendered.text:
+            raise AssertionError("link-only HTML must be marked noindex")
+        if "Факт из опубликованной ревизии." not in server_rendered.text:
+            raise AssertionError("server-rendered HTML is missing the consented game fact")
 
         updated_trip = client.patch(
             f"/suitcase/trips/{trip_id}", headers=headers,
@@ -233,6 +241,9 @@ def main() -> None:
         revoked.raise_for_status()
         if client.get(f"/t/{refreshed_slug}").status_code != 404:
             raise AssertionError("revocation did not immediately close the public page")
+        revoked_html = client.get(f"/public-mini-site/{refreshed_slug}/html")
+        if revoked_html.status_code != 404 or 'name="robots"' not in revoked_html.text:
+            raise AssertionError("revoked HTML page must return a noindex 404")
 
         workspace = client.get("/suitcase/workspace", headers=headers)
         workspace.raise_for_status()
