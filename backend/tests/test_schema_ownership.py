@@ -9,7 +9,7 @@ class SchemaOwnershipTests(unittest.TestCase):
     def test_suitcase_metadata_does_not_own_accounts(self):
         self.assertNotIn("app_user", Base.metadata.tables)
         self.assertEqual(
-            {"suitcase_trip", "suitcase_expense", "suitcase_goal"},
+            {"suitcase_trip", "suitcase_expense", "suitcase_goal", "suitcase_trip_publication"},
             set(Base.metadata.tables),
         )
 
@@ -32,3 +32,18 @@ class SchemaOwnershipTests(unittest.TestCase):
     def test_suitcase_api_does_not_publish_a_second_auth_api(self):
         paths = {route.path for route in app.routes}
         self.assertFalse({"/auth/register", "/auth/login", "/auth/me"} & paths)
+        self.assertIn("/suitcase/trips/{trip_id}/mini-site", paths)
+        self.assertIn("/t/{slug}", paths)
+
+    def test_mini_site_migration_cascades_with_trip_and_stores_consent_snapshot(self):
+        migration = (
+            Path(__file__).parents[1]
+            / "alembic"
+            / "versions"
+            / "0002_trip_mini_site_publications.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("REFERENCES suitcase_trip", migration)
+        self.assertIn("ondelete=\"CASCADE\"", migration)
+        self.assertIn("consent_version", migration)
+        self.assertIn("snapshot", migration)
+        self.assertIn("revoked_at", migration)

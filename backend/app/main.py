@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Path, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.status import HTTP_400_BAD_REQUEST, HTTP_401_UNAUTHORIZED, HTTP_404_NOT_FOUND, HTTP_409_CONFLICT
@@ -20,6 +20,9 @@ from app.schemas import (
     SuitcaseTripOut,
     SuitcaseTripPatch,
     SuitcaseWorkspaceOut,
+    MiniSiteOwnerOut,
+    MiniSitePublishRequest,
+    PublicMiniSiteOut,
 )
 from app.security import get_current_user
 from app.services import (
@@ -34,6 +37,7 @@ from app.services import (
     update_trip,
     workspace,
 )
+from app.mini_sites import get_mini_site, publish_mini_site, read_public_mini_site, revoke_mini_site
 
 
 @asynccontextmanager
@@ -99,6 +103,53 @@ async def remove_trip(trip_id: str, user=Depends(get_current_user), db: AsyncSes
     if not ok:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Поездка не найдена")
     return {"ok": True}
+
+
+@app.get("/suitcase/trips/{trip_id}/mini-site", response_model=MiniSiteOwnerOut)
+async def get_trip_mini_site(
+    trip_id: str, user=Depends(get_current_user), db: AsyncSession = Depends(get_db),
+) -> MiniSiteOwnerOut:
+    publication = await get_mini_site(db, trip_id, user["sub"])
+    if publication is None:
+        raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Поездка не найдена")
+    return MiniSiteOwnerOut(**publication)
+
+
+@app.post("/suitcase/trips/{trip_id}/mini-site", response_model=MiniSiteOwnerOut)
+async def post_trip_mini_site(
+    trip_id: str,
+    payload: MiniSitePublishRequest,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MiniSiteOwnerOut:
+    publication = await publish_mini_site(db, trip_id, user["sub"], payload.visibility)
+    if publication is None:
+        raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Поездка не найдена")
+    return MiniSiteOwnerOut(**publication)
+
+
+@app.delete("/suitcase/trips/{trip_id}/mini-site")
+async def delete_trip_mini_site(
+    trip_id: str, user=Depends(get_current_user), db: AsyncSession = Depends(get_db),
+) -> dict[str, bool]:
+    revoked = await revoke_mini_site(db, trip_id, user["sub"])
+    if revoked is None:
+        raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Поездка не найдена")
+    return {"ok": True}
+
+
+@app.get("/t/{slug}", response_model=PublicMiniSiteOut)
+async def get_public_mini_site(
+    response: Response,
+    slug: str = Path(min_length=32, max_length=64, pattern=r"^[A-Za-z0-9_-]+$"),
+    db: AsyncSession = Depends(get_db),
+) -> PublicMiniSiteOut:
+    publication = await read_public_mini_site(db, slug)
+    if publication is None:
+        raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Страница поездки не найдена")
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return PublicMiniSiteOut(**publication)
 
 
 @app.post("/suitcase/trips/{trip_id}/expenses", response_model=SuitcaseExpenseOut)

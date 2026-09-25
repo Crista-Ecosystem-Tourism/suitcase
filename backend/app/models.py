@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, MetaData, Numeric, String, Text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, MetaData, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -48,6 +48,25 @@ class SuitcaseTrip(Base, TimestampMixin):
     impressions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     photos: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class SuitcaseTripPublication(Base, TimestampMixin):
+    __tablename__ = "suitcase_trip_publication"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    trip_id: Mapped[str] = mapped_column(
+        ForeignKey("suitcase_trip.id", ondelete="CASCADE"), nullable=False, unique=True,
+    )
+    slug: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    visibility: Mapped[str] = mapped_column(String(16), nullable=False)
+    consent_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    consented_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("visibility IN ('public', 'link')", name="visibility_allowed"),
+    )
 
 
 class SuitcaseExpense(Base, TimestampMixin):

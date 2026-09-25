@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel
 
@@ -84,3 +84,20 @@ class SuitcaseWorkspaceOut(BaseModel):
     trips: list[SuitcaseTripOut]
     expenses: list[SuitcaseExpenseOut]
     goals: list[SuitcaseGoalOut]
+
+
+class MiniSitePublishRequest(BaseModel):
+    visibility: Literal["public", "link"]
+    consent_to_publish: Literal[True]
+
+
+class MiniSiteOwnerOut(BaseModel):
+    published: bool
+    slug: Optional[str] = None
+    visibility: Optional[Literal["public", "link"]] = None
+    consented_at: Optional[str] = None
+
+
+class PublicMiniSiteOut(BaseModel):
+    visibility: Literal["public", "link"]
+    snapshot: dict
