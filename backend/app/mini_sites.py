@@ -25,7 +25,9 @@ def _owner_payload(
             "visibility": None,
             "consented_at": None,
             "completed_at": trip.completed_at.isoformat() if trip.completed_at else None,
-            "draft_snapshot": None,
+            # The owner always gets a current, private preview before consenting.
+            # It is persisted only when completion creates the draft row.
+            "draft_snapshot": build_trip_snapshot(trip),
         }
     published = publication.slug is not None and publication.consented_at is not None
     return {
