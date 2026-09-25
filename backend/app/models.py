@@ -48,6 +48,7 @@ class SuitcaseTrip(Base, TimestampMixin):
     impressions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     photos: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class SuitcaseTripPublication(Base, TimestampMixin):
@@ -57,11 +58,11 @@ class SuitcaseTripPublication(Base, TimestampMixin):
     trip_id: Mapped[str] = mapped_column(
         ForeignKey("suitcase_trip.id", ondelete="CASCADE"), nullable=False, unique=True,
     )
-    slug: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
-    visibility: Mapped[str] = mapped_column(String(16), nullable=False)
-    consent_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    slug: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, unique=True)
+    visibility: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    consent_version: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    consented_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consented_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (

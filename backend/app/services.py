@@ -35,6 +35,7 @@ def trip_out(t: SuitcaseTrip) -> dict[str, Any]:
         "impressions": t.impressions,
         "photos": t.photos,
         "is_archived": t.is_archived,
+        "completed_at": _iso(t.completed_at),
         "created_at": _iso(t.created_at),
         "updated_at": _iso(t.updated_at),
     }

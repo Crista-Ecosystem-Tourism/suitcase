@@ -37,7 +37,7 @@ from app.services import (
     update_trip,
     workspace,
 )
-from app.mini_sites import get_mini_site, publish_mini_site, read_public_mini_site, revoke_mini_site
+from app.mini_sites import complete_trip, get_mini_site, publish_mini_site, read_public_mini_site, revoke_mini_site
 
 
 @asynccontextmanager
@@ -113,6 +113,16 @@ async def get_trip_mini_site(
     if publication is None:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Поездка не найдена")
     return MiniSiteOwnerOut(**publication)
+
+
+@app.post("/suitcase/trips/{trip_id}/complete", response_model=MiniSiteOwnerOut)
+async def post_complete_trip(
+    trip_id: str, user=Depends(get_current_user), db: AsyncSession = Depends(get_db),
+) -> MiniSiteOwnerOut:
+    state = await complete_trip(db, trip_id, user["sub"])
+    if state is None:
+        raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Поездка не найдена")
+    return MiniSiteOwnerOut(**state)
 
 
 @app.post("/suitcase/trips/{trip_id}/mini-site", response_model=MiniSiteOwnerOut)

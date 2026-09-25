@@ -33,6 +33,7 @@ class SuitcaseTripPatch(BaseModel):
 
 class SuitcaseTripOut(SuitcaseTripCreate):
     id: str
+    completed_at: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -93,9 +94,12 @@ class MiniSitePublishRequest(BaseModel):
 
 class MiniSiteOwnerOut(BaseModel):
     published: bool
+    draft_ready: bool = False
     slug: Optional[str] = None
     visibility: Optional[Literal["public", "link"]] = None
     consented_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    draft_snapshot: Optional[dict] = None
 
 
 class PublicMiniSiteOut(BaseModel):
