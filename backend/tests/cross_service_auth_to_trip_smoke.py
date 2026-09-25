@@ -161,13 +161,38 @@ def main() -> None:
         if "expenses" in public_page.json()["snapshot"] or "user_id" in public_page.json()["snapshot"]:
             raise AssertionError("public snapshot contains private account or expense data")
 
+        updated_trip = client.patch(
+            f"/suitcase/trips/{trip_id}", headers=headers,
+            json={"impressions": "Обновлённый owner snapshot"},
+        )
+        updated_trip.raise_for_status()
+        refreshed_preview = client.get(f"/suitcase/trips/{trip_id}/mini-site", headers=headers)
+        refreshed_preview.raise_for_status()
+        if refreshed_preview.json()["preview_snapshot"]["summary"] != "Обновлённый owner snapshot":
+            raise AssertionError("owner refresh preview does not reflect current trip data")
+        refreshed = client.post(
+            f"/suitcase/trips/{trip_id}/mini-site",
+            headers=headers,
+            json={"visibility": "link", "consent_to_publish": True},
+        )
+        refreshed.raise_for_status()
+        refreshed_slug = refreshed.json()["slug"]
+        if refreshed_slug == publication["slug"]:
+            raise AssertionError("refreshing a published snapshot must rotate its public URL")
+        if client.get(f"/t/{publication['slug']}").status_code != 404:
+            raise AssertionError("refreshing a snapshot left the old public URL active")
+        refreshed_page = client.get(f"/t/{refreshed_slug}")
+        refreshed_page.raise_for_status()
+        if refreshed_page.json()["snapshot"]["summary"] != "Обновлённый owner snapshot":
+            raise AssertionError("refreshed public page does not match the owner preview")
+
         repeated_completion = client.post(f"/suitcase/trips/{trip_id}/complete", headers=headers)
         repeated_completion.raise_for_status()
-        if repeated_completion.json()["slug"] != publication["slug"]:
+        if repeated_completion.json()["slug"] != refreshed_slug:
             raise AssertionError("re-completion changed an already published URL")
         revoked = client.delete(f"/suitcase/trips/{trip_id}/mini-site", headers=headers)
         revoked.raise_for_status()
-        if client.get(f"/t/{publication['slug']}").status_code != 404:
+        if client.get(f"/t/{refreshed_slug}").status_code != 404:
             raise AssertionError("revocation did not immediately close the public page")
 
         workspace = client.get("/suitcase/workspace", headers=headers)
