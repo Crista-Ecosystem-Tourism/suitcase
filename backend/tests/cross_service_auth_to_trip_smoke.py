@@ -8,6 +8,7 @@ file rather than process output to keep it out of CI logs.
 from __future__ import annotations
 
 import os
+import secrets
 import subprocess
 import sys
 import tempfile
@@ -69,12 +70,16 @@ def main() -> None:
                 "city": "Москва",
                 "start_date": "2026-09-18",
                 "end_date": "2026-09-20",
+                "impressions": "Секретная заметка для snapshot",
+                "photos": ["https://images.example/moscow.jpg", "file:///private/photo.jpg"],
+                "route_json": '[{"latitude":55.75,"longitude":37.62,"name":"Красная площадь","note":"Вечером"}]',
             },
         )
         trip.raise_for_status()
+        trip_id = trip.json()["id"]
 
         expense = client.post(
-            f"/suitcase/trips/{trip.json()['id']}/expenses",
+            f"/suitcase/trips/{trip_id}/expenses",
             headers=headers,
             json={
                 "amount": 1250,
@@ -107,6 +112,63 @@ def main() -> None:
         updated_goal.raise_for_status()
         if updated_goal.json()["current"] != 1:
             raise AssertionError("goal progress update was not returned by the API")
+
+        completion = client.post(f"/suitcase/trips/{trip_id}/complete", headers=headers)
+        completion.raise_for_status()
+        draft = completion.json()
+        if draft["published"] or not draft["draft_ready"] or draft["slug"] is not None:
+            raise AssertionError("trip completion must create a private draft without publication")
+        draft_snapshot = draft["draft_snapshot"]
+        if draft_snapshot["summary"] != "Секретная заметка для snapshot":
+            raise AssertionError("owner draft is missing the trip summary")
+        if draft_snapshot["photos"] != ["https://images.example/moscow.jpg"]:
+            raise AssertionError("owner draft did not filter unsafe photo URLs")
+        if draft_snapshot["points"][0]["name"] != "Красная площадь":
+            raise AssertionError("owner draft is missing the allow-listed route point")
+        if "user_id" in draft_snapshot or "expenses" in draft_snapshot:
+            raise AssertionError("owner draft contains private account or expense data")
+
+        owner_preview = client.get(f"/suitcase/trips/{trip_id}/mini-site", headers=headers)
+        owner_preview.raise_for_status()
+        if owner_preview.json()["draft_snapshot"] != draft_snapshot:
+            raise AssertionError("owner preview differs from the persisted private draft")
+
+        invalid_consent = client.post(
+            f"/suitcase/trips/{trip_id}/mini-site",
+            headers=headers,
+            json={"visibility": "link", "consent_to_publish": False},
+        )
+        if invalid_consent.status_code != 422:
+            raise AssertionError("publication must reject missing explicit consent")
+        if client.get(f"/t/{secrets.token_urlsafe(24)}").status_code != 404:
+            raise AssertionError("a private draft must not be reachable by an unissued URL")
+
+        published = client.post(
+            f"/suitcase/trips/{trip_id}/mini-site",
+            headers=headers,
+            json={"visibility": "link", "consent_to_publish": True},
+        )
+        published.raise_for_status()
+        publication = published.json()
+        if not publication["published"] or publication["draft_ready"] or not publication["slug"]:
+            raise AssertionError("explicit consent did not create the public link")
+        public_page = client.get(f"/t/{publication['slug']}")
+        public_page.raise_for_status()
+        if "no-store" not in public_page.headers.get("cache-control", ""):
+            raise AssertionError("public snapshot response must not be cached")
+        if public_page.json()["snapshot"] != draft_snapshot:
+            raise AssertionError("published page differs from the reviewed owner snapshot")
+        if "expenses" in public_page.json()["snapshot"] or "user_id" in public_page.json()["snapshot"]:
+            raise AssertionError("public snapshot contains private account or expense data")
+
+        repeated_completion = client.post(f"/suitcase/trips/{trip_id}/complete", headers=headers)
+        repeated_completion.raise_for_status()
+        if repeated_completion.json()["slug"] != publication["slug"]:
+            raise AssertionError("re-completion changed an already published URL")
+        revoked = client.delete(f"/suitcase/trips/{trip_id}/mini-site", headers=headers)
+        revoked.raise_for_status()
+        if client.get(f"/t/{publication['slug']}").status_code != 404:
+            raise AssertionError("revocation did not immediately close the public page")
 
         workspace = client.get("/suitcase/workspace", headers=headers)
         workspace.raise_for_status()
