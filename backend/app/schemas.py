@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SuitcaseTripCreate(BaseModel):
@@ -90,6 +90,11 @@ class SuitcaseWorkspaceOut(BaseModel):
 class MiniSitePublishRequest(BaseModel):
     visibility: Literal["public", "link"]
     consent_to_publish: Literal[True]
+    game_stamp_ticket: Optional[str] = Field(default=None, max_length=65536)
+
+
+class MiniSiteCompleteRequest(BaseModel):
+    game_stamp_ticket: Optional[str] = Field(default=None, max_length=65536)
 
 
 class MiniSiteOwnerOut(BaseModel):

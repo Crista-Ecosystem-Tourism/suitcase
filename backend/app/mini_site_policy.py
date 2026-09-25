@@ -79,8 +79,11 @@ def _distance_km(points: list[dict[str, Any]]) -> int:
     return round(distance)
 
 
-def build_trip_snapshot(trip: Any) -> dict[str, Any]:
-    """Allow-list trip content for public use; never copy expenses or account IDs."""
+def build_trip_snapshot(
+    trip: Any,
+    verified_game_stamps: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Allow-list trip content and server-attested stamps; exclude private account data."""
     points = _route_points(trip.route_json)
     start = _trip_date(trip.start_date)
     end = _trip_date(trip.end_date)
@@ -99,6 +102,7 @@ def build_trip_snapshot(trip: Any) -> dict[str, Any]:
         "summary": impressions,
         "photos": list(dict.fromkeys(photos)),
         "points": points,
+        "game_stamps": verified_game_stamps[:20] if isinstance(verified_game_stamps, list) else [],
         "stats": {
             "days": days,
             "places_visited": len(points),

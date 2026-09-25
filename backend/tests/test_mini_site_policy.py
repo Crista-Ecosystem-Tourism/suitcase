@@ -31,6 +31,15 @@ class MiniSiteSnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot["cover"], "https://images.example/cover.jpg")
         self.assertNotIn("expenses", snapshot)
         self.assertNotIn("user_id", snapshot)
+        self.assertEqual(snapshot["game_stamps"], [])
+
+    def test_snapshot_includes_only_server_verified_game_stamps(self):
+        stamp = {
+            "key": "red-square", "title": "Explorer", "earned_at": "2026-09-02T10:00:00+00:00",
+            "fact": "A sourced fact", "source_label": "History", "source_url": "https://example.test/source",
+        }
+        snapshot = build_trip_snapshot(self.trip, [stamp])
+        self.assertEqual(snapshot["game_stamps"], [stamp])
 
     def test_malformed_route_and_local_images_do_not_enter_public_snapshot(self):
         self.trip.route_json = "not-json"

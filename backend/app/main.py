@@ -21,6 +21,7 @@ from app.schemas import (
     SuitcaseTripPatch,
     SuitcaseWorkspaceOut,
     MiniSiteOwnerOut,
+    MiniSiteCompleteRequest,
     MiniSitePublishRequest,
     PublicMiniSiteOut,
 )
@@ -117,9 +118,17 @@ async def get_trip_mini_site(
 
 @app.post("/suitcase/trips/{trip_id}/complete", response_model=MiniSiteOwnerOut)
 async def post_complete_trip(
-    trip_id: str, user=Depends(get_current_user), db: AsyncSession = Depends(get_db),
+    trip_id: str,
+    payload: MiniSiteCompleteRequest | None = None,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> MiniSiteOwnerOut:
-    state = await complete_trip(db, trip_id, user["sub"])
+    try:
+        state = await complete_trip(
+            db, trip_id, user["sub"], payload.game_stamp_ticket if payload else None,
+        )
+    except ValueError:
+        raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail="Игровые штампы не прошли проверку")
     if state is None:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Поездка не найдена")
     return MiniSiteOwnerOut(**state)
@@ -132,7 +141,12 @@ async def post_trip_mini_site(
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> MiniSiteOwnerOut:
-    publication = await publish_mini_site(db, trip_id, user["sub"], payload.visibility)
+    try:
+        publication = await publish_mini_site(
+            db, trip_id, user["sub"], payload.visibility, payload.game_stamp_ticket,
+        )
+    except ValueError:
+        raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail="Игровые штампы не прошли проверку")
     if publication is None:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Поездка не найдена")
     return MiniSiteOwnerOut(**publication)

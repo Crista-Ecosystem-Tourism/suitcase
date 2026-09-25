@@ -9,13 +9,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.mini_site_policy import build_trip_snapshot
+from app.game_stamp_ticket import verify_game_stamp_ticket
 from app.models import SuitcaseTrip, SuitcaseTripPublication
 
-CONSENT_VERSION = "trip-mini-site-v1"
+CONSENT_VERSION = "trip-mini-site-v2-game-stamps"
 
 
 def _owner_payload(
     publication: SuitcaseTripPublication | None, trip: SuitcaseTrip,
+    preview_snapshot: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if publication is None or publication.revoked_at is not None:
         return {
@@ -26,7 +28,7 @@ def _owner_payload(
             "consented_at": None,
             "completed_at": trip.completed_at.isoformat() if trip.completed_at else None,
             "draft_snapshot": None,
-            "preview_snapshot": build_trip_snapshot(trip),
+            "preview_snapshot": preview_snapshot or build_trip_snapshot(trip),
         }
     published = publication.slug is not None and publication.consented_at is not None
     return {
@@ -39,7 +41,7 @@ def _owner_payload(
         "draft_snapshot": publication.snapshot if not published else None,
         # Active links can be refreshed against current trip data after a new
         # review/consent; keep the current link live until that write commits.
-        "preview_snapshot": build_trip_snapshot(trip) if published else publication.snapshot,
+        "preview_snapshot": preview_snapshot or (build_trip_snapshot(trip) if published else publication.snapshot),
     }
 
 
@@ -55,8 +57,14 @@ async def get_mini_site(db: AsyncSession, trip_id: str, user_id: str) -> dict[st
     return _owner_payload(publication, trip)
 
 
-async def complete_trip(db: AsyncSession, trip_id: str, user_id: str) -> dict[str, Any] | None:
+async def complete_trip(
+    db: AsyncSession,
+    trip_id: str,
+    user_id: str,
+    game_stamp_ticket: str | None = None,
+) -> dict[str, Any] | None:
     """Mark a trip complete and prepare a private draft without granting publication consent."""
+    game_stamps = verify_game_stamp_ticket(game_stamp_ticket, user_id)
     trip = await db.scalar(select(SuitcaseTrip).where(
         SuitcaseTrip.id == trip_id, SuitcaseTrip.user_id == user_id,
     ).with_for_update())
@@ -77,7 +85,7 @@ async def complete_trip(db: AsyncSession, trip_id: str, user_id: str) -> dict[st
             slug=None,
             visibility=None,
             consent_version=None,
-            snapshot=build_trip_snapshot(trip),
+            snapshot=build_trip_snapshot(trip, game_stamps),
             consented_at=None,
             revoked_at=None,
             created_at=now,
@@ -87,16 +95,35 @@ async def complete_trip(db: AsyncSession, trip_id: str, user_id: str) -> dict[st
     elif publication.slug is None and publication.revoked_at is None:
         # A repeated completion refreshes only an unpublished draft. Published or
         # revoked snapshots are deliberately left untouched.
-        publication.snapshot = build_trip_snapshot(trip)
+        publication.snapshot = build_trip_snapshot(trip, game_stamps)
         publication.updated_at = now
+    elif publication.slug is not None and publication.revoked_at is None:
+        # Preview a refreshed, attested selection without changing the live URL
+        # or the currently published point-in-time snapshot.
+        await db.commit()
+        await db.refresh(publication)
+        return _owner_payload(
+            publication, trip, preview_snapshot=build_trip_snapshot(trip, game_stamps),
+        )
+    elif publication.revoked_at is not None:
+        await db.commit()
+        await db.refresh(publication)
+        return _owner_payload(
+            publication, trip, preview_snapshot=build_trip_snapshot(trip, game_stamps),
+        )
     await db.commit()
     await db.refresh(publication)
     return _owner_payload(publication, trip)
 
 
 async def publish_mini_site(
-    db: AsyncSession, trip_id: str, user_id: str, visibility: str,
+    db: AsyncSession,
+    trip_id: str,
+    user_id: str,
+    visibility: str,
+    game_stamp_ticket: str | None = None,
 ) -> dict[str, Any] | None:
+    game_stamps = verify_game_stamp_ticket(game_stamp_ticket, user_id)
     trip = await db.scalar(select(SuitcaseTrip).where(
         SuitcaseTrip.id == trip_id, SuitcaseTrip.user_id == user_id,
     ).with_for_update())
@@ -113,7 +140,7 @@ async def publish_mini_site(
             slug=secrets.token_urlsafe(24),
             visibility=visibility,
             consent_version=CONSENT_VERSION,
-            snapshot=build_trip_snapshot(trip),
+            snapshot=build_trip_snapshot(trip, game_stamps),
             consented_at=now,
             created_at=now,
             updated_at=now,
@@ -123,7 +150,7 @@ async def publish_mini_site(
         publication.slug = secrets.token_urlsafe(24)
         publication.visibility = visibility
         publication.consent_version = CONSENT_VERSION
-        publication.snapshot = build_trip_snapshot(trip)
+        publication.snapshot = build_trip_snapshot(trip, game_stamps)
         publication.consented_at = now
         publication.revoked_at = None
         publication.updated_at = now
