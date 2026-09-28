@@ -1,11 +1,11 @@
 import React from 'react';
-import { View, Text, StyleSheet, StatusBar, TouchableOpacity, ScrollView, Alert, Modal, TextInput, FlatList, Switch } from 'react-native';
+import { View, Text, StyleSheet, StatusBar, TouchableOpacity, ScrollView, Alert, Modal, TextInput, FlatList, Switch, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useLanguage } from '../../hooks/useLanguage';
 import { useTheme } from '../../hooks/useTheme';
 import { useAuth } from '../../hooks/useAuth';
-import { getOfflineConflicts, getPresenceConsent, resolveOfflineSyncConflict, savePresenceConsent } from '../../services/api';
+import { getOfflineConflicts, getPendingOfflineMutationCount, getPresenceConsent, resolveOfflineSyncConflict, savePresenceConsent, syncPendingOfflineChanges } from '../../services/api';
 import type { OfflineMutation } from '../../services/offline';
 import { disablePushNotifications, enablePushNotifications, isPushEnabled } from '../../services/pushNotifications';
 
@@ -16,11 +16,18 @@ export default function ProfileScreen() {
     const [isLangModalVisible, setIsLangModalVisible] = React.useState(false);
     const [searchQuery, setSearchQuery] = React.useState('');
     const [syncConflicts, setSyncConflicts] = React.useState<OfflineMutation[]>([]);
+    const [pendingSync, setPendingSync] = React.useState(0);
+    const [syncing, setSyncing] = React.useState(false);
     const [pushEnabled, setPushEnabled] = React.useState(false);
     const [presenceConsent, setPresenceConsent] = React.useState(false);
 
-    const loadSyncConflicts = React.useCallback(async () => {
-        setSyncConflicts(await getOfflineConflicts());
+    const loadSyncState = React.useCallback(async () => {
+        const [conflicts, pending] = await Promise.all([
+            getOfflineConflicts(),
+            getPendingOfflineMutationCount(),
+        ]);
+        setSyncConflicts(conflicts);
+        setPendingSync(pending);
     }, []);
 
     const loadPushState = React.useCallback(async () => {
@@ -37,10 +44,10 @@ export default function ProfileScreen() {
 
     useFocusEffect(
         React.useCallback(() => {
-            void loadSyncConflicts();
+            void loadSyncState();
             void loadPushState();
             void loadPresenceConsent();
-        }, [loadPresenceConsent, loadPushState, loadSyncConflicts]),
+        }, [loadPresenceConsent, loadPushState, loadSyncState]),
     );
 
     const resolveConflict = (conflict: OfflineMutation) => {
@@ -49,13 +56,27 @@ export default function ProfileScreen() {
             {
                 text: t.profile.keepServer,
                 style: 'destructive',
-                onPress: () => void resolveOfflineSyncConflict(conflict.id, 'keep-server').then(loadSyncConflicts),
+                onPress: () => void resolveOfflineSyncConflict(conflict.id, 'keep-server').then(loadSyncState),
             },
             {
                 text: t.profile.keepLocal,
-                onPress: () => void resolveOfflineSyncConflict(conflict.id, 'keep-local').then(loadSyncConflicts),
+                onPress: () => void resolveOfflineSyncConflict(conflict.id, 'keep-local').then(loadSyncState),
             },
         ]);
+    };
+
+    const syncPendingChanges = async () => {
+        if (syncing) return;
+        setSyncing(true);
+        try {
+            const remaining = await syncPendingOfflineChanges();
+            await loadSyncState();
+            if (remaining > 0) Alert.alert(t.profile.syncPendingTitle, t.profile.syncStillPending);
+        } catch (error) {
+            Alert.alert(t.alerts.error, error instanceof Error ? error.message : t.profile.syncFailed);
+        } finally {
+            setSyncing(false);
+        }
     };
 
     const handleSignOut = async () => {
@@ -149,6 +170,38 @@ export default function ProfileScreen() {
                         </TouchableOpacity>
                     </View>
                 </View>
+
+                {pendingSync > 0 && (
+                    <View style={styles.section}>
+                        <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>{t.profile.syncPendingTitle}</Text>
+                        <View style={[styles.card, { backgroundColor: colors.card }]}>
+                            <View style={styles.menuItem}>
+                                <Ionicons name="cloud-upload-outline" size={22} color={colors.primary} />
+                                <View style={styles.notificationText}>
+                                    <Text style={[styles.menuText, styles.notificationTitle, { color: colors.text }]}>
+                                        {t.profile.syncPendingCount(pendingSync)}
+                                    </Text>
+                                    <Text style={[styles.notificationHint, { color: colors.secondaryText }]}>
+                                        {t.profile.syncPendingHint}
+                                    </Text>
+                                </View>
+                                <TouchableOpacity
+                                    accessibilityRole="button"
+                                    accessibilityLabel={t.profile.syncNow}
+                                    disabled={syncing}
+                                    onPress={() => void syncPendingChanges()}
+                                    style={[styles.syncButton, { backgroundColor: colors.primary, opacity: syncing ? 0.6 : 1 }]}
+                                >
+                                    {syncing ? (
+                                        <ActivityIndicator size="small" color={colors.background} />
+                                    ) : (
+                                        <Text style={[styles.syncButtonText, { color: colors.background }]}>{t.profile.syncNow}</Text>
+                                    )}
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+                )}
 
                 {syncConflicts.length > 0 && (
                     <View style={styles.section}>
@@ -397,6 +450,18 @@ const styles = StyleSheet.create({
     },
     notificationTitle: {
         marginLeft: 0,
+    },
+    syncButton: {
+        minWidth: 82,
+        minHeight: 36,
+        paddingHorizontal: 12,
+        borderRadius: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    syncButtonText: {
+        fontSize: 14,
+        fontWeight: '600',
     },
     divider: {
         height: StyleSheet.hairlineWidth,

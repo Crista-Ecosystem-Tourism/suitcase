@@ -217,6 +217,12 @@ export async function getPendingOfflineMutationCount(): Promise<number> {
     return (await readOfflineMutations(user.id)).filter(item => item.status !== 'conflict').length;
 }
 
+/** Replays queued local changes and refreshes the account workspace when possible. */
+export async function syncPendingOfflineChanges(): Promise<number> {
+    await apiGet<WorkspaceSnapshot>('/suitcase/workspace');
+    return getPendingOfflineMutationCount();
+}
+
 export async function getOfflineConflicts() {
     const user = await getStoredUser();
     if (!user) return [];
