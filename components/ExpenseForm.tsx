@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     View,
     Text,
@@ -17,6 +17,8 @@ import { useTheme } from '../hooks/useTheme';
 import { useLanguage } from '../hooks/useLanguage';
 import { POPULAR_CURRENCIES, getCurrencySymbol } from '../services/currencies';
 import { Modal, FlatList } from 'react-native';
+import { getTripMembers, TripMember } from '../services/tripGroup';
+import { useAuth } from '../hooks/useAuth';
 
 const { width } = Dimensions.get('window');
 
@@ -39,6 +41,7 @@ const CATEGORIES = [
 export const ExpenseForm: React.FC<ExpenseFormProps> = ({ initialData, onSubmit, loading, tripId }) => {
     const { colors, isDark } = useTheme();
     const { t } = useLanguage();
+    const { user } = useAuth();
 
     const [title, setTitle] = useState(initialData?.title || '');
     const [amount, setAmount] = useState(initialData?.amount?.toString() || '');
@@ -46,6 +49,27 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ initialData, onSubmit,
     const [category, setCategory] = useState(initialData?.category || 'Other');
     const [date, setDate] = useState(new Date(initialData?.date || Date.now()));
     const [showCurrencyModal, setShowCurrencyModal] = useState(false);
+    const [members, setMembers] = useState<TripMember[]>([]);
+    const [splitMemberIds, setSplitMemberIds] = useState<string[]>([]);
+
+    useEffect(() => {
+        let active = true;
+        void getTripMembers(tripId).then(rows => {
+            if (!active) return;
+            setMembers(rows);
+            setSplitMemberIds(rows.length > 1 ? rows.map(row => row.user_id) : []);
+        }).catch(() => {
+            if (active) setMembers([]);
+        });
+        return () => { active = false; };
+    }, [tripId]);
+
+    const toggleMember = (memberId: string) => {
+        setSplitMemberIds(current => {
+            if (current.includes(memberId)) return current.length === 1 ? current : current.filter(id => id !== memberId);
+            return [...current, memberId];
+        });
+    };
 
     const handleSubmit = () => {
         const numAmount = parseFloat(amount.replace(',', '.'));
@@ -58,6 +82,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ initialData, onSubmit,
             currency,
             category,
             date: date.toISOString(),
+            splitMemberIds: splitMemberIds.length ? splitMemberIds : undefined,
         });
     };
 
@@ -167,6 +192,21 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ initialData, onSubmit,
                     })}
                 </ScrollView>
 
+                {members.length > 1 && (
+                    <View style={styles.splitSection}>
+                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Разделить поровну</Text>
+                        <Text style={[styles.splitHint, { color: colors.secondaryText }]}>Сумма делится между отмеченными участниками.</Text>
+                        {members.map((member, index) => {
+                            const selected = splitMemberIds.includes(member.user_id);
+                            const label = member.user_id === user?.id ? 'Вы' : `Участник ${index + 1}`;
+                            return <TouchableOpacity key={member.user_id} onPress={() => toggleMember(member.user_id)} style={[styles.memberRow, { borderColor: colors.border }]}>
+                                <Text style={[styles.memberLabel, { color: colors.text }]}>{label}</Text>
+                                <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={24} color={selected ? colors.primary : colors.secondaryText} />
+                            </TouchableOpacity>;
+                        })}
+                    </View>
+                )}
+
                 {/* Submit Button */}
                 <TouchableOpacity
                     style={[
@@ -250,6 +290,10 @@ const styles = StyleSheet.create({
         marginBottom: 16,
         marginTop: 32,
     },
+    splitSection: { marginTop: 8 },
+    splitHint: { fontSize: 13, marginTop: -8, marginBottom: 10 },
+    memberRow: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    memberLabel: { fontSize: 15, fontWeight: '600' },
     card: {
         borderRadius: 24,
         overflow: 'hidden',

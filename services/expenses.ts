@@ -10,6 +10,7 @@ export interface Expense {
     title: string;
     date: string;
     currency?: string;
+    splitMemberIds?: string[];
 }
 
 interface ServerExpense {
@@ -41,6 +42,7 @@ function toServerCreate(e: Omit<Expense, 'id'>): Record<string, unknown> {
         title: e.title,
         date: e.date,
         currency: e.currency ?? null,
+        split_member_ids: e.splitMemberIds,
     };
 }
 
