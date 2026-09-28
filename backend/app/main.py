@@ -33,6 +33,8 @@ from app.schemas import (
     MiniSiteCompleteRequest,
     MiniSitePublishRequest,
     PublicMiniSiteOut,
+    PushDeviceOut,
+    PushDeviceUpsert,
 )
 from app.security import get_current_user
 from app.services import (
@@ -55,6 +57,8 @@ from app.services import (
     StaleWriteError,
     InvalidExpenseSplitError,
     InvalidSettlementError,
+    PushDeviceOwnershipError,
+    upsert_push_device,
 )
 from app.mini_sites import PublicMiniSiteQualityError, complete_trip, get_mini_site, publish_mini_site, read_public_mini_site, revoke_mini_site
 from app.mini_site_html import render_missing_mini_site_html, render_public_mini_site_html
@@ -92,6 +96,19 @@ async def get_workspace(user=Depends(get_current_user), db: AsyncSession = Depen
         expenses=[SuitcaseExpenseOut(**e) for e in data["expenses"]],
         goals=[SuitcaseGoalOut(**g) for g in data["goals"]],
     )
+
+
+@app.put("/suitcase/push-devices", response_model=PushDeviceOut)
+async def put_push_device(
+    payload: PushDeviceUpsert,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PushDeviceOut:
+    try:
+        device = await upsert_push_device(db, user["sub"], payload.model_dump())
+    except PushDeviceOwnershipError:
+        raise HTTPException(status_code=HTTP_409_CONFLICT, detail="Это устройство уже привязано к другому аккаунту")
+    return PushDeviceOut(**device)
 
 
 @app.post("/suitcase/trips", response_model=SuitcaseTripOut)

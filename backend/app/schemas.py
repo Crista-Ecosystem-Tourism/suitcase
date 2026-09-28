@@ -186,6 +186,22 @@ class SuitcaseWorkspaceOut(BaseModel):
     goals: list[SuitcaseGoalOut]
 
 
+class PushDeviceUpsert(BaseModel):
+    expo_push_token: str = Field(
+        min_length=20,
+        max_length=255,
+        pattern=r"^(?:Expo|Exponent)PushToken\[[A-Za-z0-9_-]+\]$",
+    )
+    platform: Literal["ios", "android"]
+    enabled: bool = True
+
+
+class PushDeviceOut(BaseModel):
+    expo_push_token: str
+    platform: Literal["ios", "android"]
+    enabled: bool
+
+
 class MiniSitePublishRequest(BaseModel):
     visibility: Literal["public", "link"]
     consent_to_publish: Literal[True]

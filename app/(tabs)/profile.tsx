@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, StatusBar, TouchableOpacity, ScrollView, Alert, Modal, TextInput, FlatList } from 'react-native';
+import { View, Text, StyleSheet, StatusBar, TouchableOpacity, ScrollView, Alert, Modal, TextInput, FlatList, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useLanguage } from '../../hooks/useLanguage';
@@ -7,6 +7,7 @@ import { useTheme } from '../../hooks/useTheme';
 import { useAuth } from '../../hooks/useAuth';
 import { getOfflineConflicts, resolveOfflineSyncConflict } from '../../services/api';
 import type { OfflineMutation } from '../../services/offline';
+import { disablePushNotifications, enablePushNotifications, isPushEnabled } from '../../services/pushNotifications';
 
 export default function ProfileScreen() {
     const { user, signOut } = useAuth();
@@ -15,15 +16,21 @@ export default function ProfileScreen() {
     const [isLangModalVisible, setIsLangModalVisible] = React.useState(false);
     const [searchQuery, setSearchQuery] = React.useState('');
     const [syncConflicts, setSyncConflicts] = React.useState<OfflineMutation[]>([]);
+    const [pushEnabled, setPushEnabled] = React.useState(false);
 
     const loadSyncConflicts = React.useCallback(async () => {
         setSyncConflicts(await getOfflineConflicts());
     }, []);
 
+    const loadPushState = React.useCallback(async () => {
+        setPushEnabled(await isPushEnabled());
+    }, []);
+
     useFocusEffect(
         React.useCallback(() => {
             void loadSyncConflicts();
-        }, [loadSyncConflicts]),
+            void loadPushState();
+        }, [loadPushState, loadSyncConflicts]),
     );
 
     const resolveConflict = (conflict: OfflineMutation) => {
@@ -53,6 +60,15 @@ export default function ProfileScreen() {
     const toggleTheme = () => {
         const next: any = mode === 'light' ? 'dark' : mode === 'dark' ? 'system' : 'light';
         setMode(next);
+    };
+
+    const togglePushNotifications = async (enabled: boolean) => {
+        try {
+            setPushEnabled(await (enabled ? enablePushNotifications() : disablePushNotifications()));
+        } catch (error) {
+            setPushEnabled(await isPushEnabled());
+            Alert.alert('Уведомления', error instanceof Error ? error.message : 'Не удалось изменить настройку уведомлений.');
+        }
     };
 
     const languages = [
@@ -151,11 +167,19 @@ export default function ProfileScreen() {
                             <Ionicons name="chevron-forward" size={18} color={colors.border} />
                         </TouchableOpacity>
                         <View style={[styles.divider, { backgroundColor: colors.border }]} />
-                        <TouchableOpacity style={styles.menuItem}>
+                        <View style={styles.menuItem}>
                             <Ionicons name="notifications-outline" size={22} color={colors.warning} />
-                            <Text style={[styles.menuText, { color: colors.text }]}>Notifications</Text>
-                            <Ionicons name="chevron-forward" size={18} color={colors.border} />
-                        </TouchableOpacity>
+                            <View style={styles.notificationText}>
+                                <Text style={[styles.menuText, styles.notificationTitle, { color: colors.text }]}>Push-уведомления</Text>
+                                <Text style={[styles.notificationHint, { color: colors.secondaryText }]}>Напоминания о поездках и общих расходах</Text>
+                            </View>
+                            <Switch
+                                accessibilityLabel="Включить push-уведомления"
+                                value={pushEnabled}
+                                onValueChange={(value) => void togglePushNotifications(value)}
+                                trackColor={{ false: colors.border, true: colors.primary }}
+                            />
+                        </View>
                     </View>
                 </View>
 
@@ -329,6 +353,17 @@ const styles = StyleSheet.create({
     conflictPath: {
         fontSize: 12,
         marginTop: 2,
+    },
+    notificationText: {
+        flex: 1,
+        marginLeft: 12,
+    },
+    notificationHint: {
+        fontSize: 12,
+        marginTop: 2,
+    },
+    notificationTitle: {
+        marginLeft: 0,
     },
     divider: {
         height: StyleSheet.hairlineWidth,

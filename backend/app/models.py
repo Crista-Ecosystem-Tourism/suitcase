@@ -166,3 +166,16 @@ class SuitcaseGoal(Base, TimestampMixin):
     current: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     color: Mapped[str] = mapped_column(String(32), nullable=False, default="#007AFF")
+
+
+class SuitcasePushDevice(Base, TimestampMixin):
+    __tablename__ = "suitcase_push_device"
+
+    expo_push_token: Mapped[str] = mapped_column(String(255), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    platform: Mapped[str] = mapped_column(String(16), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    __table_args__ = (
+        CheckConstraint("platform IN ('ios', 'android')", name="platform_allowed"),
+    )

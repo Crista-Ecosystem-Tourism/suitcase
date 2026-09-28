@@ -9,6 +9,7 @@ import {
     registerWithEmail,
 } from '../services/api';
 import { useLanguage } from './useLanguage';
+import { disablePushNotifications } from '../services/pushNotifications';
 
 interface AuthContextValue {
     user: CristaUser | null;
@@ -71,6 +72,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, [syncLanguageFromAccount]);
 
     const signOut = useCallback(async () => {
+        try {
+            await disablePushNotifications();
+        } catch {
+            // The server is unreachable; local credentials must still be removed.
+        }
         await apiLogout();
         setUser(null);
     }, []);

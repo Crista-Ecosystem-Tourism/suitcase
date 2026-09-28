@@ -15,6 +15,7 @@ from app.models import (
     SuitcaseExpense,
     SuitcaseExpenseShare,
     SuitcaseGoal,
+    SuitcasePushDevice,
     SuitcaseSettlement,
     SuitcaseTrip,
     SuitcaseTripMember,
@@ -39,6 +40,10 @@ class InvalidExpenseSplitError(ValueError):
 
 class InvalidSettlementError(ValueError):
     """A settlement would not reduce the sender's current trip debt."""
+
+
+class PushDeviceOwnershipError(ValueError):
+    """A push token has already been registered by another user."""
 
 
 INVITE_LIFETIME = timedelta(days=7)
@@ -106,6 +111,38 @@ def goal_out(g: SuitcaseGoal) -> dict[str, Any]:
         "created_at": _iso(g.created_at),
         "updated_at": _iso(g.updated_at),
     }
+
+
+def push_device_out(device: SuitcasePushDevice) -> dict[str, Any]:
+    return {
+        "expo_push_token": device.expo_push_token,
+        "platform": device.platform,
+        "enabled": device.enabled,
+    }
+
+
+async def upsert_push_device(db: AsyncSession, user_id: str, data: dict[str, Any]) -> dict[str, Any]:
+    device = await db.get(SuitcasePushDevice, data["expo_push_token"])
+    now = datetime.now(timezone.utc)
+    if device is None:
+        device = SuitcasePushDevice(
+            expo_push_token=data["expo_push_token"],
+            user_id=user_id,
+            platform=data["platform"],
+            enabled=data["enabled"],
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(device)
+    else:
+        if device.user_id != user_id:
+            raise PushDeviceOwnershipError
+        device.platform = data["platform"]
+        device.enabled = data["enabled"]
+        device.updated_at = now
+    await db.commit()
+    await db.refresh(device)
+    return push_device_out(device)
 
 
 def trip_member_out(member: SuitcaseTripMember) -> dict[str, str]:

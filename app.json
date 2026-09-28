@@ -42,7 +42,8 @@
       },
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "web": {
@@ -72,6 +73,7 @@
           "cameraPermission": "Allow Suitcase to take photos for your trips."
         }
       ],
+      "expo-notifications",
       "expo-asset"
     ]
   }
