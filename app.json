@@ -66,6 +66,12 @@
           "locationAlwaysAndWhenInUsePermission": "Allow Suitcase to use your location."
         }
       ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Suitcase to take photos for your trips."
+        }
+      ],
       "expo-asset"
     ]
   }

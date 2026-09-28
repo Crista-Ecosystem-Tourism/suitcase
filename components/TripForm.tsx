@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -11,6 +11,7 @@ import {
     Dimensions,
     Image,
     Modal,
+    Alert,
 } from 'react-native';
 import { Trip } from '../services/trips';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -19,6 +20,7 @@ import { useTheme } from '../hooks/useTheme';
 import { useLanguage } from '../hooks/useLanguage';
 import { getCitySuggestions, getCountrySuggestions, Suggestion } from '../services/dadata';
 import * as ImagePicker from 'expo-image-picker';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 
@@ -56,6 +58,9 @@ export const TripForm: React.FC<TripFormProps> = ({ initialData, onSubmit, loadi
     const [mood, setMood] = useState(initialData?.mood || 'peaceful');
     const [impressions, setImpressions] = useState(initialData?.impressions || '');
     const [image, setImage] = useState(initialData?.image || '');
+    const cameraRef = useRef<CameraView>(null);
+    const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+    const [cameraTarget, setCameraTarget] = useState<'cover' | number | null>(null);
 
     // Route Points State
     const [routePoints, setRoutePoints] = useState<RoutePoint[]>(() => {
@@ -103,6 +108,29 @@ export const TripForm: React.FC<TripFormProps> = ({ initialData, onSubmit, loadi
         if (!result.canceled) {
             setImage(result.assets[0].uri);
         }
+    };
+
+    const openCamera = async (target: 'cover' | number) => {
+        const permission = cameraPermission?.granted ? cameraPermission : await requestCameraPermission();
+        if (!permission.granted) {
+            Alert.alert('Камера недоступна', 'Разрешите доступ к камере в настройках устройства, чтобы сделать фото.');
+            return;
+        }
+        setCameraTarget(target);
+    };
+
+    const capturePhoto = async () => {
+        const photo = await cameraRef.current?.takePictureAsync({ quality: 0.8 });
+        if (!photo?.uri || cameraTarget === null) return;
+        if (cameraTarget === 'cover') {
+            setImage(photo.uri);
+        } else {
+            const newPoints = [...routePoints];
+            const existing = newPoints[cameraTarget].photos || [];
+            newPoints[cameraTarget] = { ...newPoints[cameraTarget], photos: [...existing, photo.uri] };
+            setRoutePoints(newPoints);
+        }
+        setCameraTarget(null);
     };
 
     const handleCityChange = async (text: string) => {
@@ -334,18 +362,24 @@ export const TripForm: React.FC<TripFormProps> = ({ initialData, onSubmit, loadi
                 contentContainerStyle={{ paddingBottom: 100 }}
             >
                 {/* Photo Picker */}
-                <TouchableOpacity
-                    onPress={pickImage}
+                <View
                     style={[styles.photoCard, { backgroundColor: colors.card, borderColor: colors.border }]}
                 >
-                    {image ? (
-                        <Image source={{ uri: image }} style={styles.selectedImage} />
-                    ) : (
-                        <View style={styles.photoPlaceholder}>
-                            <Ionicons name="camera-outline" size={32} color={colors.primary} />
-                            <Text style={[styles.photoText, { color: colors.secondaryText }]}>{t.tripDetails.addPhoto}</Text>
-                        </View>
-                    )}
+                    <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel="Выбрать фото для обложки поездки"
+                        onPress={pickImage}
+                        style={styles.photoPickerArea}
+                    >
+                        {image ? (
+                            <Image source={{ uri: image }} style={styles.selectedImage} />
+                        ) : (
+                            <View style={styles.photoPlaceholder}>
+                                <Ionicons name="camera-outline" size={32} color={colors.primary} />
+                                <Text style={[styles.photoText, { color: colors.secondaryText }]}>{t.tripDetails.addPhoto}</Text>
+                            </View>
+                        )}
+                    </TouchableOpacity>
                     {image && (
                         <TouchableOpacity
                             onPress={() => setImage('')}
@@ -354,7 +388,15 @@ export const TripForm: React.FC<TripFormProps> = ({ initialData, onSubmit, loadi
                             <Ionicons name="trash-outline" size={16} color="#FFF" />
                         </TouchableOpacity>
                     )}
-                </TouchableOpacity>
+                    <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel="Сделать фото для обложки поездки"
+                        onPress={() => void openCamera('cover')}
+                        style={[styles.captureCoverBtn, { backgroundColor: colors.primary }]}
+                    >
+                        <Ionicons name="camera" size={16} color="#FFF" />
+                    </TouchableOpacity>
+                </View>
 
                 {/* Main Destination */}
                 <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>
@@ -575,6 +617,14 @@ export const TripForm: React.FC<TripFormProps> = ({ initialData, onSubmit, loadi
                                 style={[styles.addPhotoBtn, { backgroundColor: colors.primary + '15' }]}
                                 onPress={() => addPhotoToPoint(index)}
                             >
+                                <Ionicons name="images-outline" size={22} color={colors.primary} />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                accessibilityRole="button"
+                                accessibilityLabel={`Сделать фото для точки ${index + 1}`}
+                                style={[styles.addPhotoBtn, { backgroundColor: colors.primary + '15' }]}
+                                onPress={() => void openCamera(index)}
+                            >
                                 <Ionicons name="camera-outline" size={22} color={colors.primary} />
                             </TouchableOpacity>
                         </View>
@@ -685,6 +735,24 @@ export const TripForm: React.FC<TripFormProps> = ({ initialData, onSubmit, loadi
                     </View>
                 </View>
             </Modal>
+
+            <Modal
+                visible={cameraTarget !== null}
+                animationType="slide"
+                onRequestClose={() => setCameraTarget(null)}
+            >
+                <View style={{ flex: 1, backgroundColor: '#000' }}>
+                    <CameraView ref={cameraRef} style={StyleSheet.absoluteFillObject} facing="back" />
+                    <View style={styles.cameraControls}>
+                        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Закрыть камеру" onPress={() => setCameraTarget(null)} style={styles.cameraCloseBtn}>
+                            <Ionicons name="close" size={28} color="#FFF" />
+                        </TouchableOpacity>
+                        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Сделать снимок" onPress={() => void capturePhoto()} style={styles.cameraCaptureBtn}>
+                            <Ionicons name="camera" size={30} color="#111" />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
         </KeyboardAvoidingView>
     );
 };
@@ -702,6 +770,41 @@ const styles = StyleSheet.create({
         marginLeft: 16,
         textTransform: 'uppercase',
         letterSpacing: 1
+    },
+    captureCoverBtn: {
+        position: 'absolute',
+        top: 12,
+        left: 12,
+        width: 34,
+        height: 34,
+        borderRadius: 17,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    cameraControls: {
+        position: 'absolute',
+        bottom: 42,
+        left: 24,
+        right: 24,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    cameraCloseBtn: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(0,0,0,0.55)',
+    },
+    cameraCaptureBtn: {
+        width: 68,
+        height: 68,
+        borderRadius: 34,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#FFF',
     },
     sectionHeaderRow: {
         flexDirection: 'row',
@@ -865,6 +968,12 @@ const styles = StyleSheet.create({
         borderStyle: 'dashed',
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    photoPickerArea: {
+        width: '100%',
+        height: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     selectedImage: {
         width: '100%',
