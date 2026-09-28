@@ -5,7 +5,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { useLanguage } from '../../hooks/useLanguage';
 import { useTheme } from '../../hooks/useTheme';
 import { useAuth } from '../../hooks/useAuth';
-import { getOfflineConflicts, resolveOfflineSyncConflict } from '../../services/api';
+import { getOfflineConflicts, getPresenceConsent, resolveOfflineSyncConflict, savePresenceConsent } from '../../services/api';
 import type { OfflineMutation } from '../../services/offline';
 import { disablePushNotifications, enablePushNotifications, isPushEnabled } from '../../services/pushNotifications';
 
@@ -17,6 +17,7 @@ export default function ProfileScreen() {
     const [searchQuery, setSearchQuery] = React.useState('');
     const [syncConflicts, setSyncConflicts] = React.useState<OfflineMutation[]>([]);
     const [pushEnabled, setPushEnabled] = React.useState(false);
+    const [presenceConsent, setPresenceConsent] = React.useState(false);
 
     const loadSyncConflicts = React.useCallback(async () => {
         setSyncConflicts(await getOfflineConflicts());
@@ -26,11 +27,20 @@ export default function ProfileScreen() {
         setPushEnabled(await isPushEnabled());
     }, []);
 
+    const loadPresenceConsent = React.useCallback(async () => {
+        try {
+            setPresenceConsent((await getPresenceConsent()).granted);
+        } catch {
+            setPresenceConsent(false);
+        }
+    }, []);
+
     useFocusEffect(
         React.useCallback(() => {
             void loadSyncConflicts();
             void loadPushState();
-        }, [loadPushState, loadSyncConflicts]),
+            void loadPresenceConsent();
+        }, [loadPresenceConsent, loadPushState, loadSyncConflicts]),
     );
 
     const resolveConflict = (conflict: OfflineMutation) => {
@@ -68,6 +78,15 @@ export default function ProfileScreen() {
         } catch (error) {
             setPushEnabled(await isPushEnabled());
             Alert.alert('Уведомления', error instanceof Error ? error.message : 'Не удалось изменить настройку уведомлений.');
+        }
+    };
+
+    const togglePresenceConsent = async (enabled: boolean) => {
+        try {
+            setPresenceConsent((await savePresenceConsent(enabled)).granted);
+        } catch (error) {
+            setPresenceConsent(await getPresenceConsent().then((consent) => consent.granted).catch(() => false));
+            Alert.alert('Проверка присутствия', error instanceof Error ? error.message : 'Не удалось сохранить настройку.');
         }
     };
 
@@ -166,6 +185,20 @@ export default function ProfileScreen() {
                             <Text style={[styles.menuText, { color: colors.text }]}>Edit Profile</Text>
                             <Ionicons name="chevron-forward" size={18} color={colors.border} />
                         </TouchableOpacity>
+                        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+                        <View style={styles.menuItem}>
+                            <Ionicons name="location-outline" size={22} color={colors.primary} />
+                            <View style={styles.notificationText}>
+                                <Text style={[styles.menuText, styles.notificationTitle, { color: colors.text }]}>Проверка присутствия</Text>
+                                <Text style={[styles.notificationHint, { color: colors.secondaryText }]}>Согласие хранится в аккаунте. Координаты и фото не передаются, пока проверка награды недоступна.</Text>
+                            </View>
+                            <Switch
+                                accessibilityLabel="Согласие на проверку присутствия"
+                                value={presenceConsent}
+                                onValueChange={(value) => void togglePresenceConsent(value)}
+                                trackColor={{ false: colors.border, true: colors.primary }}
+                            />
+                        </View>
                         <View style={[styles.divider, { backgroundColor: colors.border }]} />
                         <View style={styles.menuItem}>
                             <Ionicons name="notifications-outline" size={22} color={colors.warning} />

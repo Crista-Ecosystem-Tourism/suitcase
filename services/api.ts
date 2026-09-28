@@ -35,6 +35,13 @@ export interface AccountPreferences {
     language: 'ru' | 'en';
 }
 
+export interface PresenceConsent {
+    granted: boolean;
+    policy_version: string | null;
+    verification_available: false;
+    fallback: 'no_reward';
+}
+
 let memoryToken: string | null = null;
 let memoryUser: CristaUser | null = null;
 
@@ -231,6 +238,14 @@ export function getAccountPreferences(tokenOverride?: string): Promise<AccountPr
 
 export function saveAccountPreferences(preferences: AccountPreferences, tokenOverride?: string): Promise<AccountPreferences> {
     return apiPut<AccountPreferences>('/auth/preferences', preferences, tokenOverride);
+}
+
+export function getPresenceConsent(): Promise<PresenceConsent> {
+    return apiGet<PresenceConsent>('/vision/presence-consent');
+}
+
+export function savePresenceConsent(granted: boolean): Promise<PresenceConsent> {
+    return apiPut<PresenceConsent>('/vision/presence-consent', { granted, policy_version: 'presence-v1' });
 }
 
 // --- Auth API ---
