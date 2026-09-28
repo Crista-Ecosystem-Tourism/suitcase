@@ -164,6 +164,13 @@ async def get_trip_membership(db: AsyncSession, trip_id: str, user_id: str) -> S
     return await db.get(SuitcaseTripMember, {"trip_id": trip_id, "user_id": user_id})
 
 
+async def trip_member_user_ids(db: AsyncSession, trip_id: str, exclude_user_id: str | None = None) -> list[str]:
+    statement = select(SuitcaseTripMember.user_id).where(SuitcaseTripMember.trip_id == trip_id)
+    if exclude_user_id:
+        statement = statement.where(SuitcaseTripMember.user_id != exclude_user_id)
+    return list((await db.scalars(statement)).all())
+
+
 async def _trip_member_ids(db: AsyncSession, trip_id: str) -> set[str]:
     return set(
         (await db.scalars(
@@ -554,7 +561,9 @@ async def delete_trip(
     return True
 
 
-async def create_expense(db: AsyncSession, user_id: str, trip_id: str, data: dict[str, Any]) -> dict[str, Any] | None:
+async def create_expense(
+    db: AsyncSession, user_id: str, trip_id: str, data: dict[str, Any],
+) -> tuple[dict[str, Any], bool] | None:
     if not await get_trip_membership(db, trip_id, user_id):
         return None
     client_request_id = data.pop("client_request_id", None)
@@ -568,7 +577,7 @@ async def create_expense(db: AsyncSession, user_id: str, trip_id: str, data: dic
                     select(SuitcaseExpenseShare).where(SuitcaseExpenseShare.expense_id == existing.id)
                 )).all()
             )
-            return expense_out(existing, shares)
+            return expense_out(existing, shares), False
     amount = Decimal(str(data["amount"]))
     payer_id = data.get("paid_by_user_id") or user_id
     shares = _normalized_expense_shares(amount, payer_id, data, await _trip_member_ids(db, trip_id))
@@ -606,12 +615,12 @@ async def create_expense(db: AsyncSession, user_id: str, trip_id: str, data: dic
                     select(SuitcaseExpenseShare).where(SuitcaseExpenseShare.expense_id == existing.id)
                 )).all()
             )
-            return expense_out(existing, existing_shares)
+            return expense_out(existing, existing_shares), False
         raise ValueError("client request ID already belongs to another expense")
     await db.refresh(expense)
     return expense_out(expense, list((await db.scalars(
         select(SuitcaseExpenseShare).where(SuitcaseExpenseShare.expense_id == expense.id)
-    )).all()))
+    )).all())), True
 
 
 async def update_expense(db: AsyncSession, expense_id: str, user_id: str, data: dict[str, Any]) -> dict[str, Any] | None:

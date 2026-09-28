@@ -2,6 +2,7 @@ alembic==1.18.4
 asyncpg==0.31.0
 bcrypt==5.0.0
 fastapi==0.118.0
+httpx==0.28.1
 PyJWT==2.11.0
 python-dotenv>=1.0.1
 sqlalchemy[asyncio]==2.0.47

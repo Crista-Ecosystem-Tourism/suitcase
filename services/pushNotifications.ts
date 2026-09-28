@@ -11,6 +11,17 @@ const ENABLED_KEY_PREFIX = 'crista_push_enabled_';
 
 type NativePlatform = 'ios' | 'android';
 
+if (Platform.OS !== 'web') {
+    Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+            shouldShowBanner: true,
+            shouldShowList: true,
+            shouldPlaySound: true,
+            shouldSetBadge: false,
+        }),
+    });
+}
+
 interface PushDeviceRegistration {
     expo_push_token: string;
     platform: NativePlatform;
@@ -40,6 +51,13 @@ export async function enablePushNotifications(): Promise<boolean> {
     const nativePlatform = platform();
     if (!nativePlatform || !Device.isDevice) {
         throw new Error('Push-уведомления доступны только на физическом iOS или Android устройстве.');
+    }
+
+    if (nativePlatform === 'android') {
+        await Notifications.setNotificationChannelAsync('default', {
+            name: 'Поездки',
+            importance: Notifications.AndroidImportance.DEFAULT,
+        });
     }
 
     let permission = await Notifications.getPermissionsAsync();

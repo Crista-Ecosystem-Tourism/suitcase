@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 
-from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request, Response
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Path, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -59,9 +59,11 @@ from app.services import (
     InvalidSettlementError,
     PushDeviceOwnershipError,
     upsert_push_device,
+    trip_member_user_ids,
 )
 from app.mini_sites import PublicMiniSiteQualityError, complete_trip, get_mini_site, publish_mini_site, read_public_mini_site, revoke_mini_site
 from app.mini_site_html import render_missing_mini_site_html, render_public_mini_site_html
+from app.push import send_push_to_users
 
 
 @asynccontextmanager
@@ -346,17 +348,27 @@ async def get_public_mini_site_html(
 async def post_expense(
     trip_id: str,
     payload: SuitcaseExpenseCreate,
+    background_tasks: BackgroundTasks,
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SuitcaseExpenseOut:
     try:
-        row = await create_expense(db, user["sub"], trip_id, payload.model_dump(exclude_unset=True))
+        result = await create_expense(db, user["sub"], trip_id, payload.model_dump(exclude_unset=True))
     except InvalidExpenseSplitError as exc:
         raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(exc))
     except ValueError:
         raise HTTPException(status_code=HTTP_409_CONFLICT, detail="Идентификатор операции уже занят")
-    if not row:
+    if not result:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Поездка не найдена")
+    row, created = result
+    if created:
+        background_tasks.add_task(
+            send_push_to_users,
+            await trip_member_user_ids(db, trip_id, exclude_user_id=user["sub"]),
+            title="Новый расход в поездке",
+            body=row["title"],
+            data={"type": "expense", "trip_id": trip_id, "expense_id": row["id"]},
+        )
     return SuitcaseExpenseOut(**row)
 
 
