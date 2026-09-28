@@ -17,21 +17,25 @@ import { getTripById, deleteTrip, Trip, updateTrip } from '../../services/trips'
 import { fetchExchangeRates, convertCurrency, getCurrencySymbol } from '../../services/currencies';
 import * as ImagePicker from 'expo-image-picker';
 import { getExpensesByTrip, Expense } from '../../services/expenses';
-import { createTripInvite } from '../../services/tripGroup';
+import { createTripInvite, getTripMembers, getTripSplitSummary, SplitSummary, TripMember } from '../../services/tripGroup';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useTheme } from '../../hooks/useTheme';
 import { useLanguage } from '../../hooks/useLanguage';
+import { useAuth } from '../../hooks/useAuth';
 const { width } = Dimensions.get('window');
 
 export default function TripDetailScreen() {
     const { colors, isDark } = useTheme();
     const { t, language } = useLanguage();
+    const { user } = useAuth();
 
     const { id } = useLocalSearchParams<{ id: string }>();
     const [trip, setTrip] = useState<Trip | null>(null);
     const [expenses, setExpenses] = useState<Expense[]>([]);
+    const [members, setMembers] = useState<TripMember[]>([]);
+    const [splitSummary, setSplitSummary] = useState<SplitSummary | null>(null);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(false);
     const [deleting, setDeleting] = useState(false);
@@ -74,6 +78,21 @@ export default function TripDetailScreen() {
                 if (!focusedRef.current || requestIdRef.current !== requestId) return;
                 setTrip(tripData);
                 setExpenses(expensesData);
+                try {
+                    const [memberRows, summary] = await Promise.all([
+                        getTripMembers(id),
+                        getTripSplitSummary(id),
+                    ]);
+                    if (focusedRef.current && requestIdRef.current === requestId) {
+                        setMembers(memberRows);
+                        setSplitSummary(summary);
+                    }
+                } catch {
+                    if (focusedRef.current && requestIdRef.current === requestId) {
+                        setMembers([]);
+                        setSplitSummary(null);
+                    }
+                }
 
                 // Fetch exchange rates
                 const latestRates = await fetchExchangeRates('RUB');
@@ -219,6 +238,11 @@ export default function TripDetailScreen() {
     const startDate = new Date(trip.startDate).toLocaleDateString(locale, { month: 'long', day: 'numeric' });
     const endDate = new Date(trip.endDate).toLocaleDateString(locale, { month: 'long', day: 'numeric', year: 'numeric' });
     const canManageTrip = trip.membershipRole !== 'member';
+    const ownBalances = splitSummary?.currencies.flatMap(({ currency, balances, suggested_settlements }) => {
+        const balance = balances.find(item => item.user_id === user?.id);
+        if (!balance) return [];
+        return [{ currency, amount: Number(balance.amount), suggestions: suggested_settlements }];
+    }) ?? [];
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -310,6 +334,39 @@ export default function TripDetailScreen() {
                         <View style={[styles.statBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
                             <Text style={[styles.statLabel, { color: colors.secondaryText }]}>{t.tripDetails.expenses}</Text>
                             <Text style={[styles.statValue, { color: colors.text }]}>{expenses.length}</Text>
+                        </View>
+                    </View>
+
+                    <View style={styles.section}>
+                        <View style={styles.sectionHeader}>
+                            <View style={[styles.sectionIcon, { backgroundColor: colors.primary + '10' }]}>
+                                <Ionicons name="people-outline" size={20} color={colors.primary} />
+                            </View>
+                            <Text style={[styles.sectionTitle, { color: colors.text }]}>Группа поездки</Text>
+                        </View>
+                        <View style={[styles.card, styles.groupCard, { backgroundColor: colors.card }]}>
+                            <Text style={[styles.groupMembers, { color: colors.text }]}>
+                                {members.length ? `Участников: ${members.length}` : 'Участники загружаются'}
+                            </Text>
+                            {members.length === 1 && canManageTrip && (
+                                <Text style={[styles.groupHint, { color: colors.secondaryText }]}>Пригласите участника кнопкой с силуэтом вверху.</Text>
+                            )}
+                            {ownBalances.map(({ currency, amount, suggestions }) => (
+                                <View key={currency} style={[styles.balanceRow, { borderTopColor: colors.border }]}>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={[styles.groupMembers, { color: colors.text }]}>{currency}</Text>
+                                        <Text style={[styles.groupHint, { color: colors.secondaryText }]}>
+                                            {amount < 0 ? 'Вы должны группе' : amount > 0 ? 'Группа должна вам' : 'Баланс закрыт'}
+                                        </Text>
+                                    </View>
+                                    <Text style={[styles.balanceAmount, { color: amount < 0 ? colors.error : amount > 0 ? colors.success : colors.secondaryText }]}>
+                                        {Math.abs(amount).toFixed(2)}
+                                    </Text>
+                                    {suggestions.some(item => item.from_user_id === user?.id || item.to_user_id === user?.id) && (
+                                        <Text style={[styles.settlementHint, { color: colors.secondaryText }]}>Есть расчёт</Text>
+                                    )}
+                                </View>
+                            ))}
                         </View>
                     </View>
 
@@ -448,6 +505,12 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         overflow: 'hidden',
     },
+    groupCard: { padding: 16 },
+    groupMembers: { fontSize: 16, fontWeight: '700' },
+    groupHint: { fontSize: 13, lineHeight: 18, marginTop: 5 },
+    balanceRow: { flexDirection: 'row', alignItems: 'center', borderTopWidth: StyleSheet.hairlineWidth, marginTop: 14, paddingTop: 14 },
+    balanceAmount: { fontSize: 16, fontWeight: '800', marginLeft: 12 },
+    settlementHint: { fontSize: 12, marginLeft: 8 },
 
     mapContainer: {
         height: 300,
