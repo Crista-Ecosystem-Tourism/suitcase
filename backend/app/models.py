@@ -49,6 +49,8 @@ class SuitcaseTrip(Base, TimestampMixin):
     impressions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     photos: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
     is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Historical imports are travel records only. They must never be interpreted as game completion.
+    is_historical: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 

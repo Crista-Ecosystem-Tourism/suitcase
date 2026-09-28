@@ -14,6 +14,8 @@ export interface Trip {
     impressions?: string;
     photos?: string[];
     isArchived?: boolean;
+    /** A user-imported past trip. It remains outside all game completion flows. */
+    isHistorical?: boolean;
     createdAt?: string;
     membershipRole?: 'owner' | 'member';
 }
@@ -30,6 +32,7 @@ interface ServerTrip {
     impressions: string | null;
     photos: string[] | null;
     is_archived: boolean;
+    is_historical: boolean;
     created_at: string | null;
     updated_at: string | null;
     membership_role: 'owner' | 'member' | null;
@@ -48,6 +51,7 @@ function fromServer(t: ServerTrip): Trip {
         impressions: t.impressions || undefined,
         photos: t.photos || undefined,
         isArchived: t.is_archived,
+        isHistorical: t.is_historical,
         createdAt: t.created_at || undefined,
         membershipRole: t.membership_role || undefined,
     };
@@ -65,6 +69,7 @@ function toServerCreate(t: Omit<Trip, 'id' | 'createdAt'>): Record<string, unkno
         impressions: t.impressions ?? null,
         photos: t.photos ?? null,
         is_archived: t.isArchived ?? false,
+        is_historical: t.isHistorical ?? false,
     };
 }
 
@@ -108,6 +113,7 @@ export const addTrip = async (tripData: Omit<Trip, 'id' | 'createdAt'>): Promise
                 impressions: tripData.impressions ?? null,
                 photos: tripData.photos ?? null,
                 is_archived: tripData.isArchived ?? false,
+                is_historical: tripData.isHistorical ?? false,
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
             }, ...snapshot.trips],

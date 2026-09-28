@@ -71,6 +71,7 @@ def trip_out(t: SuitcaseTrip, membership_role: str | None = None) -> dict[str, A
         "impressions": t.impressions,
         "photos": t.photos,
         "is_archived": t.is_archived,
+        "is_historical": t.is_historical,
         "completed_at": _iso(t.completed_at),
         "created_at": _iso(t.created_at),
         "updated_at": _iso(t.updated_at),
@@ -506,6 +507,7 @@ async def create_trip(db: AsyncSession, user_id: str, data: dict[str, Any]) -> d
         impressions=data.get("impressions"),
         photos=data.get("photos"),
         is_archived=bool(data.get("is_archived", False)),
+        is_historical=bool(data.get("is_historical", False)),
         created_at=now,
         updated_at=now,
     )

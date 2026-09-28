@@ -12,6 +12,7 @@ import {
     Image,
     Modal,
     Alert,
+    Switch,
 } from 'react-native';
 import { Trip } from '../services/trips';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -58,6 +59,7 @@ export const TripForm: React.FC<TripFormProps> = ({ initialData, onSubmit, loadi
     const [mood, setMood] = useState(initialData?.mood || 'peaceful');
     const [impressions, setImpressions] = useState(initialData?.impressions || '');
     const [image, setImage] = useState(initialData?.image || '');
+    const [isHistorical, setIsHistorical] = useState(initialData?.isHistorical ?? false);
     const cameraRef = useRef<CameraView>(null);
     const [cameraPermission, requestCameraPermission] = useCameraPermissions();
     const [cameraTarget, setCameraTarget] = useState<'cover' | number | null>(null);
@@ -346,7 +348,8 @@ export const TripForm: React.FC<TripFormProps> = ({ initialData, onSubmit, loadi
             mood,
             image,
             route_json: JSON.stringify(routePoints),
-            impressions
+            impressions,
+            isHistorical,
         });
     };
 
@@ -509,6 +512,29 @@ export const TripForm: React.FC<TripFormProps> = ({ initialData, onSubmit, loadi
                         />
                     </View>
                 </View>
+
+                {!initialData && (
+                    <>
+                        <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>
+                            {t.tripDetails.historicalTripTitle.toUpperCase()}
+                        </Text>
+                        <View style={[styles.card, { backgroundColor: colors.card }]}>
+                            <View style={styles.historicalRow}>
+                                <Ionicons name="time-outline" size={22} color={colors.primary} />
+                                <View style={styles.historicalText}>
+                                    <Text style={[styles.dateLabelText, { color: colors.text }]}>{t.tripDetails.historicalTrip}</Text>
+                                    <Text style={[styles.historicalHint, { color: colors.secondaryText }]}>{t.tripDetails.historicalTripHint}</Text>
+                                </View>
+                                <Switch
+                                    accessibilityLabel={t.tripDetails.historicalTrip}
+                                    value={isHistorical}
+                                    onValueChange={setIsHistorical}
+                                    trackColor={{ false: colors.border, true: colors.primary }}
+                                />
+                            </View>
+                        </View>
+                    </>
+                )}
 
                 {/* Impressions */}
                 <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>
@@ -856,6 +882,22 @@ const styles = StyleSheet.create({
     dateLabelText: {
         fontSize: 17,
         fontWeight: '500',
+    },
+    historicalRow: {
+        minHeight: 68,
+        paddingHorizontal: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    historicalText: {
+        flex: 1,
+        marginLeft: 12,
+        marginRight: 12,
+    },
+    historicalHint: {
+        fontSize: 12,
+        marginTop: 3,
+        lineHeight: 16,
     },
     textArea: {
         fontSize: 16,

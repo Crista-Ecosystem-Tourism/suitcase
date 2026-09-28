@@ -21,6 +21,7 @@ class SuitcaseTripCreate(ClientRequestBody):
     impressions: Optional[str] = None
     photos: Optional[list] = None
     is_archived: bool = False
+    is_historical: bool = False
 
 
 class SuitcaseTripPatch(BaseModel):
@@ -49,6 +50,7 @@ class SuitcaseTripOut(BaseModel):
     impressions: Optional[str] = None
     photos: Optional[list] = None
     is_archived: bool = False
+    is_historical: bool = False
     completed_at: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
