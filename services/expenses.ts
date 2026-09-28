@@ -1,6 +1,6 @@
 import { apiDelete, apiGet, apiPatch, apiPost } from './api';
 import { getStoredUser } from './api';
-import { createClientRequestId, enqueueOfflineMutation, isNetworkError, updateWorkspaceSnapshot } from './offline';
+import { createClientRequestId, enqueueOfflineMutation, isNetworkError, readWorkspaceSnapshot, updateWorkspaceSnapshot } from './offline';
 
 export interface Expense {
     id?: string;
@@ -94,16 +94,26 @@ export const getExpenseById = async (id: string): Promise<Expense | null> => {
 export const updateExpense = async (id: string, data: Partial<Expense>): Promise<void> => {
     const body = toServerPatch(data);
     const path = `/suitcase/expenses/${id}`;
+    const user = await getStoredUser();
+    const workspace = user ? await readWorkspaceSnapshot(user.id) : null;
+    const cached = workspace?.expenses.find(expense => expense.id === id);
+    if (typeof cached?.updated_at === 'string') body.base_updated_at = cached.updated_at;
     try {
-        await apiPatch<ServerExpense>(path, body);
+        const updated = await apiPatch<ServerExpense>(path, body);
+        if (user) {
+            await updateWorkspaceSnapshot(user.id, snapshot => ({
+                ...snapshot,
+                expenses: snapshot.expenses.map(expense => expense.id === id ? updated : expense),
+            }));
+        }
     } catch (error) {
         if (!isNetworkError(error)) throw error;
-        const user = await getStoredUser();
         if (!user) throw error;
         await enqueueOfflineMutation(user.id, { id: createClientRequestId(), method: 'PATCH', path, body });
+        const { base_updated_at: _baseUpdatedAt, ...changes } = body;
         await updateWorkspaceSnapshot(user.id, snapshot => ({
             ...snapshot,
-            expenses: snapshot.expenses.map(expense => expense.id === id ? { ...expense, ...body, updated_at: new Date().toISOString() } : expense),
+            expenses: snapshot.expenses.map(expense => expense.id === id ? { ...expense, ...changes, updated_at: new Date().toISOString() } : expense),
         }));
     }
 };

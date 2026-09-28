@@ -19,6 +19,10 @@ DEFAULT_SUITCASE_GOALS: list[dict[str, Any]] = [
 ]
 
 
+class StaleWriteError(ValueError):
+    """The client edited a version that has changed on another device."""
+
+
 def _iso(dt: datetime | None) -> str | None:
     return dt.isoformat() if dt else None
 
@@ -163,6 +167,9 @@ async def update_trip(db: AsyncSession, trip_id: str, user_id: str, data: dict[s
     trip = await get_trip_owned(db, trip_id, user_id)
     if not trip:
         return None
+    expected_updated_at = data.pop("base_updated_at", None)
+    if expected_updated_at is not None and expected_updated_at != _iso(trip.updated_at):
+        raise StaleWriteError
     for key, value in data.items():
         setattr(trip, key, value)
     trip.updated_at = datetime.now(timezone.utc)
@@ -224,6 +231,9 @@ async def update_expense(db: AsyncSession, expense_id: str, user_id: str, data: 
     trip = await get_trip_owned(db, expense.trip_id, user_id)
     if not trip:
         return None
+    expected_updated_at = data.pop("base_updated_at", None)
+    if expected_updated_at is not None and expected_updated_at != _iso(expense.updated_at):
+        raise StaleWriteError
     for key, value in data.items():
         setattr(expense, key, float(value) if key == "amount" else value)
     expense.updated_at = datetime.now(timezone.utc)
@@ -278,6 +288,9 @@ async def update_goal(db: AsyncSession, goal_id: str, user_id: str, data: dict[s
     goal = (await db.execute(select(SuitcaseGoal).where(SuitcaseGoal.id == goal_id))).scalar_one_or_none()
     if not goal or goal.user_id != user_id:
         return None
+    expected_updated_at = data.pop("base_updated_at", None)
+    if expected_updated_at is not None and expected_updated_at != _iso(goal.updated_at):
+        raise StaleWriteError
     for key, value in data.items():
         setattr(goal, key, value)
     goal.updated_at = datetime.now(timezone.utc)

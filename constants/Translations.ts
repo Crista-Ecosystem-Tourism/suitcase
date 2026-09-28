@@ -134,6 +134,10 @@ export const translations = {
             system: 'System',
             logout: 'Log Out',
             account: 'Account',
+            syncConflicts: 'Sync conflicts',
+            syncConflictDetail: 'This change conflicts with newer data on another device.',
+            keepLocal: 'Use this device',
+            keepServer: 'Keep server version',
         },
         login: {
             welcome: 'Welcome back!',
@@ -312,6 +316,10 @@ export const translations = {
             system: 'Системная',
             logout: 'Выйти',
             account: 'Аккаунт',
+            syncConflicts: 'Конфликты синхронизации',
+            syncConflictDetail: 'Это изменение конфликтует с более новыми данными на другом устройстве.',
+            keepLocal: 'Использовать данные устройства',
+            keepServer: 'Оставить серверную версию',
         },
         login: {
             welcome: 'С возвращением!',

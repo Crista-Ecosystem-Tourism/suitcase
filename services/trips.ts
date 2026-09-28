@@ -1,5 +1,5 @@
 import { apiDelete, apiGet, apiPatch, apiPost } from './api';
-import { createClientRequestId, enqueueOfflineMutation, isNetworkError, updateWorkspaceSnapshot } from './offline';
+import { createClientRequestId, enqueueOfflineMutation, isNetworkError, readWorkspaceSnapshot, updateWorkspaceSnapshot } from './offline';
 import { getStoredUser } from './api';
 
 export interface Trip {
@@ -129,16 +129,26 @@ export const getTripById = async (id: string): Promise<Trip | null> => {
 export const updateTrip = async (id: string, data: Partial<Trip>): Promise<void> => {
     const body = toServerPatch(data);
     const path = `/suitcase/trips/${id}`;
+    const user = await getStoredUser();
+    const workspace = user ? await readWorkspaceSnapshot(user.id) : null;
+    const cached = workspace?.trips.find(trip => trip.id === id);
+    if (typeof cached?.updated_at === 'string') body.base_updated_at = cached.updated_at;
     try {
-        await apiPatch<ServerTrip>(path, body);
+        const updated = await apiPatch<ServerTrip>(path, body);
+        if (user) {
+            await updateWorkspaceSnapshot(user.id, snapshot => ({
+                ...snapshot,
+                trips: snapshot.trips.map(trip => trip.id === id ? updated : trip),
+            }));
+        }
     } catch (error) {
         if (!isNetworkError(error)) throw error;
-        const user = await getStoredUser();
         if (!user) throw error;
         await enqueueOfflineMutation(user.id, { id: createClientRequestId(), method: 'PATCH', path, body });
+        const { base_updated_at: _baseUpdatedAt, ...changes } = body;
         await updateWorkspaceSnapshot(user.id, snapshot => ({
             ...snapshot,
-            trips: snapshot.trips.map(trip => trip.id === id ? { ...trip, ...body, updated_at: new Date().toISOString() } : trip),
+            trips: snapshot.trips.map(trip => trip.id === id ? { ...trip, ...changes, updated_at: new Date().toISOString() } : trip),
         }));
     }
 };

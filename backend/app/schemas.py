@@ -23,6 +23,7 @@ class SuitcaseTripCreate(ClientRequestBody):
 
 
 class SuitcaseTripPatch(BaseModel):
+    base_updated_at: Optional[str] = Field(default=None, max_length=64)
     country: Optional[str] = None
     city: Optional[str] = None
     start_date: Optional[str] = None
@@ -53,7 +54,6 @@ class SuitcaseTripOut(BaseModel):
 
 
 class SuitcaseExpenseCreate(ClientRequestBody):
-    client_request_id: Optional[str] = Field(default=None, min_length=16, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
     amount: float
     category: str
     title: str
@@ -62,6 +62,7 @@ class SuitcaseExpenseCreate(ClientRequestBody):
 
 
 class SuitcaseExpensePatch(BaseModel):
+    base_updated_at: Optional[str] = Field(default=None, max_length=64)
     amount: Optional[float] = None
     category: Optional[str] = None
     title: Optional[str] = None
@@ -82,7 +83,6 @@ class SuitcaseExpenseOut(BaseModel):
 
 
 class SuitcaseGoalCreate(ClientRequestBody):
-    client_request_id: Optional[str] = Field(default=None, min_length=16, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
     title: str
     current: int = 0
     total: int = 1
@@ -90,6 +90,7 @@ class SuitcaseGoalCreate(ClientRequestBody):
 
 
 class SuitcaseGoalPatch(BaseModel):
+    base_updated_at: Optional[str] = Field(default=None, max_length=64)
     title: Optional[str] = None
     current: Optional[int] = None
     total: Optional[int] = None

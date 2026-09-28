@@ -11,6 +11,8 @@ export interface OfflineMutation {
     method: 'POST' | 'PATCH' | 'DELETE';
     path: string;
     body?: Record<string, unknown>;
+    status?: 'pending' | 'conflict';
+    conflictMessage?: string;
 }
 
 const workspaceKey = (userId: string) => `crista_offline_workspace:${userId}`;
@@ -58,10 +60,17 @@ export async function enqueueOfflineMutation(userId: string, mutation: OfflineMu
     try {
         const raw = await AsyncStorage.getItem(queueKey(userId));
         const queue = raw ? JSON.parse(raw) as OfflineMutation[] : [];
-        if (!queue.some(item => item.id === mutation.id)) {
+        const existingPatch = mutation.method === 'PATCH'
+            ? queue.find(item => item.method === 'PATCH' && item.path === mutation.path && item.status !== 'conflict')
+            : undefined;
+        if (existingPatch) {
+            const baseUpdatedAt = existingPatch.body?.base_updated_at;
+            existingPatch.body = { ...existingPatch.body, ...mutation.body };
+            if (baseUpdatedAt !== undefined) existingPatch.body.base_updated_at = baseUpdatedAt;
+        } else if (!queue.some(item => item.id === mutation.id)) {
             queue.push(mutation);
-            await AsyncStorage.setItem(queueKey(userId), JSON.stringify(queue));
         }
+        await AsyncStorage.setItem(queueKey(userId), JSON.stringify(queue));
     } catch {
         throw new Error('Не удалось сохранить действие для синхронизации');
     }
@@ -82,4 +91,20 @@ export async function replaceOfflineMutations(userId: string, queue: OfflineMuta
     } catch {
         // Keep the in-memory flow usable; a later workspace refresh reconciles the server state.
     }
+}
+
+export async function resolveOfflineConflict(
+    userId: string,
+    mutationId: string,
+    resolution: 'keep-local' | 'keep-server',
+): Promise<void> {
+    const queue = await readOfflineMutations(userId);
+    const next = queue.flatMap(mutation => {
+        if (mutation.id !== mutationId) return [mutation];
+        if (resolution === 'keep-server') return [];
+        const body = { ...mutation.body };
+        delete body.base_updated_at;
+        return [{ ...mutation, body, status: 'pending', conflictMessage: undefined }];
+    });
+    await replaceOfflineMutations(userId, next);
 }

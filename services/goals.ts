@@ -40,16 +40,26 @@ export async function createGoal(goal: Omit<SuitcaseGoal, 'id'>): Promise<Suitca
 
 export async function updateGoal(id: string, goal: Partial<Omit<SuitcaseGoal, 'id'>>): Promise<SuitcaseGoal> {
     const path = `/suitcase/goals/${id}`;
+    const user = await getStoredUser();
+    const workspace = user ? await readWorkspaceSnapshot(user.id) : null;
+    const cached = workspace?.goals.find(item => item.id === id);
+    const body: Record<string, unknown> = { ...goal };
+    if (typeof cached?.updated_at === 'string') body.base_updated_at = cached.updated_at;
     try {
-        return await apiPatch<SuitcaseGoal>(path, goal);
+        const updated = await apiPatch<SuitcaseGoal>(path, body);
+        if (user) {
+            await updateWorkspaceSnapshot(user.id, snapshot => ({
+                ...snapshot,
+                goals: snapshot.goals.map(item => item.id === id ? updated : item),
+            }));
+        }
+        return updated;
     } catch (error) {
         if (!isNetworkError(error)) throw error;
-        const user = await getStoredUser();
         if (!user) throw error;
-        const workspace = await readWorkspaceSnapshot(user.id);
         const current = workspace?.goals.find(item => item.id === id) as SuitcaseGoal | undefined;
         if (!workspace || !current) throw error;
-        await enqueueOfflineMutation(user.id, { id: createClientRequestId(), method: 'PATCH', path, body: goal });
+        await enqueueOfflineMutation(user.id, { id: createClientRequestId(), method: 'PATCH', path, body });
         const updated: SuitcaseGoal = { ...current, ...goal };
         await writeWorkspaceSnapshot(user.id, {
             ...workspace,

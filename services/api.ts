@@ -3,6 +3,7 @@ import { ApiBaseUrl, IdentityApiBaseUrl } from '../constants/Config';
 import { resolveApiUrl } from './apiRouting.js';
 import {
     readOfflineMutations,
+    resolveOfflineConflict,
     readWorkspaceSnapshot,
     replaceOfflineMutations,
     writeWorkspaceSnapshot,
@@ -120,6 +121,7 @@ async function syncOfflineMutations(): Promise<void> {
     const remaining = [...queue];
     while (remaining.length) {
         const mutation = remaining[0];
+        if (mutation.status === 'conflict') break;
         let response: Response;
         try {
             response = await fetch(requestUrl(mutation.path), {
@@ -128,6 +130,11 @@ async function syncOfflineMutations(): Promise<void> {
                 body: mutation.body ? JSON.stringify(mutation.body) : undefined,
             });
         } catch {
+            break;
+        }
+        if (response.status === 409) {
+            remaining[0] = { ...mutation, status: 'conflict', conflictMessage: 'Данные изменились на другом устройстве' };
+            await replaceOfflineMutations(user.id, remaining);
             break;
         }
         if (!response.ok && !(mutation.method === 'DELETE' && response.status === 404)) break;
@@ -200,7 +207,22 @@ export async function apiPut<T>(path: string, body: unknown, tokenOverride?: str
 export async function getPendingOfflineMutationCount(): Promise<number> {
     const user = await getStoredUser();
     if (!user) return 0;
-    return (await readOfflineMutations(user.id)).length;
+    return (await readOfflineMutations(user.id)).filter(item => item.status !== 'conflict').length;
+}
+
+export async function getOfflineConflicts() {
+    const user = await getStoredUser();
+    if (!user) return [];
+    return (await readOfflineMutations(user.id)).filter(item => item.status === 'conflict');
+}
+
+export async function resolveOfflineSyncConflict(
+    mutationId: string,
+    resolution: 'keep-local' | 'keep-server',
+): Promise<void> {
+    const user = await getStoredUser();
+    if (!user) return;
+    await resolveOfflineConflict(user.id, mutationId, resolution);
 }
 
 export function getAccountPreferences(tokenOverride?: string): Promise<AccountPreferences> {

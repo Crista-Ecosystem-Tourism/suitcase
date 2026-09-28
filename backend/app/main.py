@@ -39,6 +39,7 @@ from app.services import (
     update_goal,
     update_trip,
     workspace,
+    StaleWriteError,
 )
 from app.mini_sites import complete_trip, get_mini_site, publish_mini_site, read_public_mini_site, revoke_mini_site
 from app.mini_site_html import render_missing_mini_site_html, render_public_mini_site_html
@@ -98,7 +99,10 @@ async def patch_trip(
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SuitcaseTripOut:
-    row = await update_trip(db, trip_id, user["sub"], payload.model_dump(exclude_unset=True))
+    try:
+        row = await update_trip(db, trip_id, user["sub"], payload.model_dump(exclude_unset=True))
+    except StaleWriteError:
+        raise HTTPException(status_code=HTTP_409_CONFLICT, detail="Данные изменились на другом устройстве")
     if not row:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Поездка не найдена")
     return SuitcaseTripOut(**row)
@@ -242,7 +246,10 @@ async def patch_expense(
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SuitcaseExpenseOut:
-    row = await update_expense(db, expense_id, user["sub"], payload.model_dump(exclude_unset=True))
+    try:
+        row = await update_expense(db, expense_id, user["sub"], payload.model_dump(exclude_unset=True))
+    except StaleWriteError:
+        raise HTTPException(status_code=HTTP_409_CONFLICT, detail="Данные изменились на другом устройстве")
     if not row:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Расход не найден")
     return SuitcaseExpenseOut(**row)
@@ -276,7 +283,10 @@ async def patch_goal(
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SuitcaseGoalOut:
-    row = await update_goal(db, goal_id, user["sub"], payload.model_dump(exclude_unset=True))
+    try:
+        row = await update_goal(db, goal_id, user["sub"], payload.model_dump(exclude_unset=True))
+    except StaleWriteError:
+        raise HTTPException(status_code=HTTP_409_CONFLICT, detail="Данные изменились на другом устройстве")
     if not row:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Цель не найдена")
     return SuitcaseGoalOut(**row)

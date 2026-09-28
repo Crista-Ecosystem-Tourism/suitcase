@@ -1,10 +1,12 @@
 import React from 'react';
 import { View, Text, StyleSheet, StatusBar, TouchableOpacity, ScrollView, Alert, Modal, TextInput, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useLanguage } from '../../hooks/useLanguage';
 import { useTheme } from '../../hooks/useTheme';
 import { useAuth } from '../../hooks/useAuth';
+import { getOfflineConflicts, resolveOfflineSyncConflict } from '../../services/api';
+import type { OfflineMutation } from '../../services/offline';
 
 export default function ProfileScreen() {
     const { user, signOut } = useAuth();
@@ -12,6 +14,32 @@ export default function ProfileScreen() {
     const { colors, mode, setMode, isDark } = useTheme();
     const [isLangModalVisible, setIsLangModalVisible] = React.useState(false);
     const [searchQuery, setSearchQuery] = React.useState('');
+    const [syncConflicts, setSyncConflicts] = React.useState<OfflineMutation[]>([]);
+
+    const loadSyncConflicts = React.useCallback(async () => {
+        setSyncConflicts(await getOfflineConflicts());
+    }, []);
+
+    useFocusEffect(
+        React.useCallback(() => {
+            void loadSyncConflicts();
+        }, [loadSyncConflicts]),
+    );
+
+    const resolveConflict = (conflict: OfflineMutation) => {
+        Alert.alert(t.profile.syncConflicts, t.profile.syncConflictDetail, [
+            { text: t.alerts.cancelBtn, style: 'cancel' },
+            {
+                text: t.profile.keepServer,
+                style: 'destructive',
+                onPress: () => void resolveOfflineSyncConflict(conflict.id, 'keep-server').then(loadSyncConflicts),
+            },
+            {
+                text: t.profile.keepLocal,
+                onPress: () => void resolveOfflineSyncConflict(conflict.id, 'keep-local').then(loadSyncConflicts),
+            },
+        ]);
+    };
 
     const handleSignOut = async () => {
         try {
@@ -80,6 +108,33 @@ export default function ProfileScreen() {
                         </TouchableOpacity>
                     </View>
                 </View>
+
+                {syncConflicts.length > 0 && (
+                    <View style={styles.section}>
+                        <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>{t.profile.syncConflicts}</Text>
+                        <View style={[styles.card, { backgroundColor: colors.card }]}>
+                            {syncConflicts.map((conflict, index) => (
+                                <React.Fragment key={conflict.id}>
+                                    {index > 0 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
+                                    <TouchableOpacity
+                                        accessibilityRole="button"
+                                        style={styles.menuItem}
+                                        onPress={() => resolveConflict(conflict)}
+                                    >
+                                        <Ionicons name="warning-outline" size={22} color={colors.warning} />
+                                        <View style={styles.conflictText}>
+                                            <Text style={[styles.menuText, { color: colors.text }]}>{t.profile.syncConflictDetail}</Text>
+                                            <Text style={[styles.conflictPath, { color: colors.secondaryText }]} numberOfLines={1}>
+                                                {conflict.path}
+                                            </Text>
+                                        </View>
+                                        <Ionicons name="chevron-forward" size={18} color={colors.border} />
+                                    </TouchableOpacity>
+                                </React.Fragment>
+                            ))}
+                        </View>
+                    </View>
+                )}
 
                 <View style={styles.section}>
                     <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>{t.profile.account}</Text>
@@ -260,6 +315,14 @@ const styles = StyleSheet.create({
         fontSize: 17,
         color: '#8E8E93',
         marginRight: 4,
+    },
+    conflictText: {
+        flex: 1,
+        marginLeft: 12,
+    },
+    conflictPath: {
+        fontSize: 12,
+        marginTop: 2,
     },
     divider: {
         height: StyleSheet.hairlineWidth,
