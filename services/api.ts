@@ -197,6 +197,12 @@ export async function apiPut<T>(path: string, body: unknown, tokenOverride?: str
     return parse<T>(r);
 }
 
+export async function getPendingOfflineMutationCount(): Promise<number> {
+    const user = await getStoredUser();
+    if (!user) return 0;
+    return (await readOfflineMutations(user.id)).length;
+}
+
 export function getAccountPreferences(tokenOverride?: string): Promise<AccountPreferences> {
     return apiGet<AccountPreferences>('/auth/preferences', tokenOverride);
 }

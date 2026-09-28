@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { getAllTrips, Trip } from '../../services/trips';
+import { getPendingOfflineMutationCount } from '../../services/api';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../hooks/useAuth';
@@ -37,6 +38,7 @@ export default function HomeScreen() {
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+    const [pendingSync, setPendingSync] = useState(0);
     const [selectedMapTrip, setSelectedMapTrip] = useState<TripWithCoords | null>(null);
     const popupAnim = useRef(new Animated.Value(0)).current;
     const focusedRef = useRef(false);
@@ -63,6 +65,7 @@ export default function HomeScreen() {
             tripRequestRef.current += 1;
             setTrips([]);
             setLoadError(false);
+            setPendingSync(0);
             setLoading(false);
             setRefreshing(false);
             return;
@@ -73,7 +76,11 @@ export default function HomeScreen() {
         try {
             const data = await getAllTrips();
             const mappedTrips = await geocodeTrips(data);
-            if (focusedRef.current && tripRequestRef.current === requestId) setTrips(mappedTrips);
+            const pending = await getPendingOfflineMutationCount();
+            if (focusedRef.current && tripRequestRef.current === requestId) {
+                setTrips(mappedTrips);
+                setPendingSync(pending);
+            }
         } catch (error) {
             console.error('Fetch trips error:', error);
             if (focusedRef.current && tripRequestRef.current === requestId) setLoadError(true);
@@ -136,6 +143,15 @@ export default function HomeScreen() {
                     >
                         <Text style={styles.emptyAddBtnText}>{t.home.retry}</Text>
                     </TouchableOpacity>
+                </View>
+            )}
+
+            {pendingSync > 0 && (
+                <View style={[styles.syncBanner, { backgroundColor: colors.card }]}>
+                    <Ionicons name="cloud-upload-outline" size={18} color={colors.primary} />
+                    <Text style={[styles.syncBannerText, { color: colors.secondaryText }]}>
+                        {t.home.syncPending}: {pendingSync}
+                    </Text>
                 </View>
             )}
 
@@ -481,6 +497,20 @@ const styles = StyleSheet.create({
     statusText: {
         marginTop: 16,
         marginBottom: 0,
+    },
+    syncBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        borderRadius: 14,
+        paddingHorizontal: 14,
+        paddingVertical: 11,
+        marginBottom: 8,
+    },
+    syncBannerText: {
+        flex: 1,
+        fontSize: 13,
+        fontWeight: '600',
     },
     emptyAddBtn: {
         paddingVertical: 14,

@@ -19,6 +19,7 @@ import { useFocusEffect } from 'expo-router';
 import { useTheme } from '../../hooks/useTheme';
 import { useLanguage } from '../../hooks/useLanguage';
 import { createGoal, deleteGoal, getGoals, updateGoal, type SuitcaseGoal } from '../../services/goals';
+import { getPendingOfflineMutationCount } from '../../services/api';
 
 export default function GoalsScreen() {
     const { colors, isDark } = useTheme();
@@ -33,6 +34,7 @@ export default function GoalsScreen() {
     const [createError, setCreateError] = useState(false);
     const [updatingGoalId, setUpdatingGoalId] = useState<string | null>(null);
     const [deletingGoalId, setDeletingGoalId] = useState<string | null>(null);
+    const [pendingSync, setPendingSync] = useState(0);
     const requestIdRef = useRef(0);
 
     const loadGoals = useCallback(async () => {
@@ -41,7 +43,11 @@ export default function GoalsScreen() {
         setLoadError(false);
         try {
             const result = await getGoals();
-            if (requestIdRef.current === requestId) setGoals(result);
+            const pending = await getPendingOfflineMutationCount();
+            if (requestIdRef.current === requestId) {
+                setGoals(result);
+                setPendingSync(pending);
+            }
         } catch (error) {
             console.error('Fetch goals error:', error);
             if (requestIdRef.current === requestId) setLoadError(true);
@@ -133,6 +139,7 @@ export default function GoalsScreen() {
         try {
             const updated = await updateGoal(goal.id, { current: Math.min(goal.current + 1, goal.total) });
             setGoals(current => current.map(item => item.id === updated.id ? updated : item));
+            setPendingSync(await getPendingOfflineMutationCount());
         } catch (error) {
             console.error('Update goal progress error:', error);
             Alert.alert(t.alerts.error, t.goals.updateError);
@@ -147,6 +154,7 @@ export default function GoalsScreen() {
         try {
             await deleteGoal(goal.id);
             setGoals(current => current.filter(item => item.id !== goal.id));
+            setPendingSync(await getPendingOfflineMutationCount());
         } catch (error) {
             console.error('Delete goal error:', error);
             Alert.alert(t.alerts.error, t.goals.deleteError);
@@ -168,6 +176,7 @@ export default function GoalsScreen() {
         try {
             const goal = await createGoal({ title, current: 0, total, color: colors.primary });
             setGoals(current => [...current, goal]);
+            setPendingSync(await getPendingOfflineMutationCount());
             setDraftTitle('');
             setDraftTotal('');
             setCreateOpen(false);
@@ -212,6 +221,15 @@ export default function GoalsScreen() {
                         <Text style={[styles.statLabel, { color: colors.secondaryText }]}>{t.goals.completed}</Text>
                     </View>
                 </View>
+
+                {pendingSync > 0 && (
+                    <View style={[styles.syncBanner, { backgroundColor: colors.card }]}>
+                        <Ionicons name="cloud-upload-outline" size={18} color={colors.primary} />
+                        <Text style={[styles.syncBannerText, { color: colors.secondaryText }]}>
+                            {t.home.syncPending}: {pendingSync}
+                        </Text>
+                    </View>
+                )}
 
                 <Text style={[styles.sectionTitle, { color: colors.text }]}>{t.goals.activeTitle}</Text>
                 {loading && goals.length === 0 && (
@@ -362,6 +380,20 @@ const styles = StyleSheet.create({
     statusText: {
         textAlign: 'center',
         marginVertical: 8,
+    },
+    syncBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        borderRadius: 14,
+        paddingHorizontal: 14,
+        paddingVertical: 11,
+        marginBottom: 16,
+    },
+    syncBannerText: {
+        flex: 1,
+        fontSize: 13,
+        fontWeight: '600',
     },
     retryText: {
         padding: 8,
