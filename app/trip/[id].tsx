@@ -328,6 +328,12 @@ export default function TripDetailScreen() {
                         <View style={{ flex: 1 }}>
                             <Text style={[styles.cityText, { color: colors.text }]}>{trip.city}</Text>
                             <Text style={[styles.countryText, { color: colors.secondaryText }]}>{trip.country}</Text>
+                            {trip.isHistorical && (
+                                <View style={[styles.historicalBadge, { backgroundColor: colors.primary + '16' }]}>
+                                    <Ionicons name="time-outline" size={14} color={colors.primary} />
+                                    <Text style={[styles.historicalBadgeText, { color: colors.primary }]}>{t.tripDetails.historicalTripBadge}</Text>
+                                </View>
+                            )}
                         </View>
                         <View style={[styles.moodBadge, { backgroundColor: colors.card }]}>
                             <Text style={[styles.moodText, { color: colors.primary }]}>{trip.mood}</Text>
@@ -603,6 +609,20 @@ const styles = StyleSheet.create({
         fontWeight: '500',
         color: '#8E8E93',
         marginTop: 2,
+    },
+    historicalBadge: {
+        alignSelf: 'flex-start',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        borderRadius: 8,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        marginTop: 8,
+    },
+    historicalBadgeText: {
+        fontSize: 12,
+        fontWeight: '700',
     },
     moodBadge: {
         backgroundColor: '#FFFFFF',

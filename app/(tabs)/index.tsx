@@ -120,7 +120,8 @@ export default function HomeScreen() {
     };
 
     const activeTrips = trips.filter(t => !t.isArchived);
-    const lastTrip = activeTrips[0] ?? null;
+    // Imported history must not be presented as the user's latest live journey.
+    const lastTrip = activeTrips.find(trip => !trip.isHistorical) ?? null;
     const validMapTrips = activeTrips.filter(t => t.lat && t.lng);
 
     const renderListHeader = () => (
@@ -303,7 +304,7 @@ export default function HomeScreen() {
                 contentContainerStyle={styles.list}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.success} />}
                 renderItem={({ item }) => (
-                    <TripCard trip={item} onPress={() => router.push(`/trip/${item.id}`)} colors={colors} />
+                    <TripCard trip={item} onPress={() => router.push(`/trip/${item.id}`)} colors={colors} t={t} />
                 )}
                 ListHeaderComponent={renderListHeader}
                 ListFooterComponent={renderListFooter}
@@ -326,7 +327,7 @@ function FeaturedContent({ trip, colors, t }: { trip: Trip; colors: any; t: any 
     );
 }
 
-function TripCard({ trip, onPress, colors }: { trip: TripWithCoords; onPress: () => void; colors: any }) {
+function TripCard({ trip, onPress, colors, t }: { trip: TripWithCoords; onPress: () => void; colors: any; t: any }) {
     return (
         <TouchableOpacity
             style={[styles.tripCard, { backgroundColor: colors.card }]}
@@ -336,6 +337,12 @@ function TripCard({ trip, onPress, colors }: { trip: TripWithCoords; onPress: ()
             <View style={styles.tripCardMain}>
                 <View style={{ flex: 1 }}>
                     <Text style={[styles.tripCountry, { color: colors.text }]}>{trip.country}</Text>
+                    {trip.isHistorical && (
+                        <View style={[styles.historicalBadge, { backgroundColor: colors.primary + '16' }]}>
+                            <Ionicons name="time-outline" size={12} color={colors.primary} />
+                            <Text style={[styles.historicalBadgeText, { color: colors.primary }]}>{t.tripDetails.historicalTripBadge}</Text>
+                        </View>
+                    )}
                     <View style={styles.tripCityRow}>
                         <Ionicons name="location" size={12} color={colors.success} />
                         <Text style={[styles.tripCityDate, { color: colors.secondaryText }]} numberOfLines={1}>
@@ -535,6 +542,20 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '700',
         marginBottom: 3,
+    },
+    historicalBadge: {
+        alignSelf: 'flex-start',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        borderRadius: 8,
+        paddingHorizontal: 7,
+        paddingVertical: 3,
+        marginBottom: 5,
+    },
+    historicalBadgeText: {
+        fontSize: 11,
+        fontWeight: '700',
     },
     tripCityRow: {
         flexDirection: 'row',

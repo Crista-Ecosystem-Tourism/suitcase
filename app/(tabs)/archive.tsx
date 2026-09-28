@@ -80,6 +80,12 @@ export default function ArchiveScreen() {
                         <View style={styles.cardContent}>
                             <Text style={[styles.cityText, { color: colors.text }]}>{item.city}</Text>
                             <Text style={[styles.countryText, { color: colors.secondaryText }]}>{item.country}</Text>
+                            {item.isHistorical && (
+                                <View style={[styles.historicalBadge, { backgroundColor: colors.primary + '16' }]}>
+                                    <Ionicons name="time-outline" size={12} color={colors.primary} />
+                                    <Text style={[styles.historicalBadgeText, { color: colors.primary }]}>{t.tripDetails.historicalTripBadge}</Text>
+                                </View>
+                            )}
                         </View>
                         <Ionicons name="chevron-forward" size={20} color={colors.secondaryText} />
                     </TouchableOpacity>
@@ -132,6 +138,8 @@ const styles = StyleSheet.create({
     cardContent: { flex: 1 },
     cityText: { fontSize: 18, fontWeight: '700' },
     countryText: { fontSize: 14, marginTop: 2 },
+    historicalBadge: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3, marginTop: 6 },
+    historicalBadgeText: { fontSize: 11, fontWeight: '700' },
     empty: {
         flex: 1,
         alignItems: 'center',
