@@ -51,6 +51,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ initialData, onSubmit,
     const [showCurrencyModal, setShowCurrencyModal] = useState(false);
     const [members, setMembers] = useState<TripMember[]>([]);
     const [splitMemberIds, setSplitMemberIds] = useState<string[]>([]);
+    const [paidByUserId, setPaidByUserId] = useState<string | undefined>(user?.id);
 
     useEffect(() => {
         let active = true;
@@ -58,6 +59,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ initialData, onSubmit,
             if (!active) return;
             setMembers(rows);
             setSplitMemberIds(rows.length > 1 ? rows.map(row => row.user_id) : []);
+            setPaidByUserId(current => current && rows.some(row => row.user_id === current) ? current : user?.id);
         }).catch(() => {
             if (active) setMembers([]);
         });
@@ -83,6 +85,7 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ initialData, onSubmit,
             category,
             date: date.toISOString(),
             splitMemberIds: splitMemberIds.length ? splitMemberIds : undefined,
+            paidByUserId,
         });
     };
 
@@ -194,6 +197,16 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ initialData, onSubmit,
 
                 {members.length > 1 && (
                     <View style={styles.splitSection}>
+                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Оплатил</Text>
+                        <Text style={[styles.splitHint, { color: colors.secondaryText }]}>Укажите, кто оплатил этот расход.</Text>
+                        {members.map((member, index) => {
+                            const selected = paidByUserId === member.user_id;
+                            const label = member.user_id === user?.id ? 'Вы' : `Участник ${index + 1}`;
+                            return <TouchableOpacity key={`payer-${member.user_id}`} onPress={() => setPaidByUserId(member.user_id)} style={[styles.memberRow, { borderColor: colors.border }]}>
+                                <Text style={[styles.memberLabel, { color: colors.text }]}>{label}</Text>
+                                <Ionicons name={selected ? 'radio-button-on' : 'radio-button-off'} size={24} color={selected ? colors.primary : colors.secondaryText} />
+                            </TouchableOpacity>;
+                        })}
                         <Text style={[styles.sectionTitle, { color: colors.text }]}>Разделить поровну</Text>
                         <Text style={[styles.splitHint, { color: colors.secondaryText }]}>Сумма делится между отмеченными участниками.</Text>
                         {members.map((member, index) => {
