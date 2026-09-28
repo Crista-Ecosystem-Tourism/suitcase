@@ -17,7 +17,7 @@ import { getTripById, deleteTrip, Trip, updateTrip } from '../../services/trips'
 import { fetchExchangeRates, convertCurrency, getCurrencySymbol } from '../../services/currencies';
 import * as ImagePicker from 'expo-image-picker';
 import { getExpensesByTrip, Expense } from '../../services/expenses';
-import { createTripInvite, getTripMembers, getTripSplitSummary, SplitSummary, TripMember } from '../../services/tripGroup';
+import { createTripInvite, getTripMembers, getTripSplitSummary, settleTripDebt, SplitSummary, TripMember } from '../../services/tripGroup';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -208,6 +208,19 @@ export default function TripDetailScreen() {
         }
     };
 
+    const confirmSettlement = (toUserId: string, amount: string, currency: string) => {
+        if (!id) return;
+        Alert.alert('Подтвердить погашение', `Отметить перевод ${amount} ${currency}?`, [
+            { text: t.alerts.cancelBtn, style: 'cancel' },
+            {
+                text: 'Подтвердить',
+                onPress: () => void settleTripDebt(id, toUserId, amount, currency)
+                    .then(() => loadData())
+                    .catch(error => Alert.alert(t.alerts.error, error instanceof Error ? error.message : t.alerts.updateError)),
+            },
+        ]);
+    };
+
     const totalSpent = useMemo(() => {
         return expenses.reduce((sum, exp) => {
             const amountInRub = convertCurrency(exp.amount, exp.currency || 'RUB', 'RUB', rates);
@@ -362,9 +375,11 @@ export default function TripDetailScreen() {
                                     <Text style={[styles.balanceAmount, { color: amount < 0 ? colors.error : amount > 0 ? colors.success : colors.secondaryText }]}>
                                         {Math.abs(amount).toFixed(2)}
                                     </Text>
-                                    {suggestions.some(item => item.from_user_id === user?.id || item.to_user_id === user?.id) && (
-                                        <Text style={[styles.settlementHint, { color: colors.secondaryText }]}>Есть расчёт</Text>
-                                    )}
+                                    {suggestions.filter(item => item.from_user_id === user?.id).map(item => (
+                                        <TouchableOpacity key={`${item.to_user_id}-${item.amount}`} onPress={() => confirmSettlement(item.to_user_id, item.amount, currency)} style={[styles.settlementButton, { backgroundColor: colors.primary + '15' }]}>
+                                            <Text style={[styles.settlementButtonText, { color: colors.primary }]}>Погасить</Text>
+                                        </TouchableOpacity>
+                                    ))}
                                 </View>
                             ))}
                         </View>
@@ -510,7 +525,8 @@ const styles = StyleSheet.create({
     groupHint: { fontSize: 13, lineHeight: 18, marginTop: 5 },
     balanceRow: { flexDirection: 'row', alignItems: 'center', borderTopWidth: StyleSheet.hairlineWidth, marginTop: 14, paddingTop: 14 },
     balanceAmount: { fontSize: 16, fontWeight: '800', marginLeft: 12 },
-    settlementHint: { fontSize: 12, marginLeft: 8 },
+    settlementButton: { marginLeft: 8, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6 },
+    settlementButtonText: { fontSize: 12, fontWeight: '700' },
 
     mapContainer: {
         height: 300,

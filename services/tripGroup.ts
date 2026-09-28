@@ -35,3 +35,11 @@ export function createTripInvite(tripId: string): Promise<TripInvite> {
 export function acceptTripInvite(inviteCode: string): Promise<{ trip_id: string; created: boolean }> {
     return apiPost('/suitcase/member-invites/accept', { invite_code: inviteCode.trim() });
 }
+
+export function settleTripDebt(tripId: string, toUserId: string, amount: string, currency: string): Promise<void> {
+    return apiPost(`/suitcase/trips/${tripId}/settlements`, {
+        to_user_id: toUserId,
+        amount,
+        currency,
+    });
+}
