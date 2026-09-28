@@ -10,7 +10,7 @@ import {
     Platform,
     Dimensions
 } from 'react-native';
-import { Expense } from '../services/expenses';
+import { Expense, ExpenseShare } from '../services/expenses';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
@@ -38,6 +38,21 @@ const CATEGORIES = [
     { id: 'Other', icon: 'ellipsis-horizontal-outline', color: '#8E8E93' },
 ];
 
+function parseAmountUnits(value: string): number | null {
+    const match = value.trim().match(/^(\d+)(?:[.,](\d{0,4}))?$/);
+    if (!match) return null;
+    const whole = Number(match[1]);
+    const fractional = Number(`${match[2] || ''}0000`.slice(0, 4));
+    const units = whole * 10000 + fractional;
+    return Number.isSafeInteger(units) ? units : null;
+}
+
+function formatAmountUnits(units: number): string {
+    const whole = Math.floor(units / 10000);
+    const fractional = String(units % 10000).padStart(4, '0');
+    return `${whole}.${fractional}`;
+}
+
 export const ExpenseForm: React.FC<ExpenseFormProps> = ({ initialData, onSubmit, loading, tripId }) => {
     const { colors, isDark } = useTheme();
     const { t } = useLanguage();
@@ -51,6 +66,9 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ initialData, onSubmit,
     const [showCurrencyModal, setShowCurrencyModal] = useState(false);
     const [members, setMembers] = useState<TripMember[]>([]);
     const [splitMemberIds, setSplitMemberIds] = useState<string[]>([]);
+    const [splitMode, setSplitMode] = useState<'equal' | 'custom'>('equal');
+    const [customShares, setCustomShares] = useState<Record<string, string>>({});
+    const [splitError, setSplitError] = useState<string | null>(null);
     const [paidByUserId, setPaidByUserId] = useState<string | undefined>(user?.id);
 
     useEffect(() => {
@@ -73,9 +91,45 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ initialData, onSubmit,
         });
     };
 
+    const beginCustomSplit = () => {
+        const amountUnits = parseAmountUnits(amount);
+        const participants = splitMemberIds.length ? splitMemberIds : members.map(member => member.user_id);
+        if (amountUnits === null || amountUnits <= 0 || participants.length === 0) {
+            setSplitError('Сначала укажите сумму и хотя бы одного участника.');
+            return;
+        }
+        const base = Math.floor(amountUnits / participants.length);
+        const remainder = amountUnits - base * participants.length;
+        setCustomShares(Object.fromEntries(participants.map((memberId, index) => [
+            memberId,
+            formatAmountUnits(base + (index === 0 ? remainder : 0)),
+        ])));
+        setSplitError(null);
+        setSplitMode('custom');
+    };
+
+    const updateCustomShare = (memberId: string, value: string) => {
+        setCustomShares(current => ({ ...current, [memberId]: value }));
+        setSplitError(null);
+    };
+
     const handleSubmit = () => {
         const numAmount = parseFloat(amount.replace(',', '.'));
         if (!title || isNaN(numAmount)) return;
+
+        let shares: ExpenseShare[] | undefined;
+        if (splitMode === 'custom') {
+            const amountUnits = parseAmountUnits(amount);
+            const parsedShares = members.map(member => ({
+                userId: member.user_id,
+                amount: parseAmountUnits(customShares[member.user_id] || ''),
+            })).filter((share): share is { userId: string; amount: number } => share.amount !== null && share.amount > 0);
+            if (amountUnits === null || parsedShares.length === 0 || parsedShares.reduce((total, share) => total + share.amount, 0) !== amountUnits) {
+                setSplitError('Сумма долей должна точно совпадать с расходом.');
+                return;
+            }
+            shares = parsedShares.map(share => ({ userId: share.userId, amount: formatAmountUnits(share.amount) }));
+        }
 
         onSubmit({
             trip_id: tripId,
@@ -84,8 +138,9 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ initialData, onSubmit,
             currency,
             category,
             date: date.toISOString(),
-            splitMemberIds: splitMemberIds.length ? splitMemberIds : undefined,
+            splitMemberIds: splitMode === 'equal' && splitMemberIds.length ? splitMemberIds : undefined,
             paidByUserId,
+            shares,
         });
     };
 
@@ -207,16 +262,35 @@ export const ExpenseForm: React.FC<ExpenseFormProps> = ({ initialData, onSubmit,
                                 <Ionicons name={selected ? 'radio-button-on' : 'radio-button-off'} size={24} color={selected ? colors.primary : colors.secondaryText} />
                             </TouchableOpacity>;
                         })}
-                        <Text style={[styles.sectionTitle, { color: colors.text }]}>Разделить поровну</Text>
-                        <Text style={[styles.splitHint, { color: colors.secondaryText }]}>Сумма делится между отмеченными участниками.</Text>
-                        {members.map((member, index) => {
-                            const selected = splitMemberIds.includes(member.user_id);
-                            const label = member.user_id === user?.id ? 'Вы' : `Участник ${index + 1}`;
-                            return <TouchableOpacity key={member.user_id} onPress={() => toggleMember(member.user_id)} style={[styles.memberRow, { borderColor: colors.border }]}>
-                                <Text style={[styles.memberLabel, { color: colors.text }]}>{label}</Text>
-                                <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={24} color={selected ? colors.primary : colors.secondaryText} />
-                            </TouchableOpacity>;
-                        })}
+                        <View style={styles.splitModeRow}>
+                            <TouchableOpacity onPress={() => { setSplitMode('equal'); setSplitError(null); }} style={[styles.splitModeButton, { borderColor: colors.border }, splitMode === 'equal' && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
+                                <Text style={[styles.splitModeText, { color: splitMode === 'equal' ? '#FFF' : colors.text }]}>Поровну</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={beginCustomSplit} style={[styles.splitModeButton, { borderColor: colors.border }, splitMode === 'custom' && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
+                                <Text style={[styles.splitModeText, { color: splitMode === 'custom' ? '#FFF' : colors.text }]}>Точные доли</Text>
+                            </TouchableOpacity>
+                        </View>
+                        {splitMode === 'equal' ? <>
+                            <Text style={[styles.splitHint, { color: colors.secondaryText }]}>Сумма делится между отмеченными участниками.</Text>
+                            {members.map((member, index) => {
+                                const selected = splitMemberIds.includes(member.user_id);
+                                const label = member.user_id === user?.id ? 'Вы' : `Участник ${index + 1}`;
+                                return <TouchableOpacity key={member.user_id} onPress={() => toggleMember(member.user_id)} style={[styles.memberRow, { borderColor: colors.border }]}>
+                                    <Text style={[styles.memberLabel, { color: colors.text }]}>{label}</Text>
+                                    <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={24} color={selected ? colors.primary : colors.secondaryText} />
+                                </TouchableOpacity>;
+                            })}
+                        </> : <>
+                            <Text style={[styles.splitHint, { color: colors.secondaryText }]}>Укажите сумму каждого участника. Пустая доля не участвует в расходе.</Text>
+                            {members.map((member, index) => {
+                                const label = member.user_id === user?.id ? 'Вы' : `Участник ${index + 1}`;
+                                return <View key={member.user_id} style={[styles.memberRow, { borderColor: colors.border }]}>
+                                    <Text style={[styles.memberLabel, { color: colors.text }]}>{label}</Text>
+                                    <TextInput value={customShares[member.user_id] || ''} onChangeText={(value) => updateCustomShare(member.user_id, value)} placeholder="0" placeholderTextColor={colors.border} keyboardType="decimal-pad" style={[styles.shareInput, { color: colors.text, borderColor: colors.border }]} />
+                                </View>;
+                            })}
+                        </>}
+                        {splitError && <Text style={[styles.splitError, { color: colors.error }]}>{splitError}</Text>}
                     </View>
                 )}
 
@@ -305,8 +379,13 @@ const styles = StyleSheet.create({
     },
     splitSection: { marginTop: 8 },
     splitHint: { fontSize: 13, marginTop: -8, marginBottom: 10 },
+    splitModeRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+    splitModeButton: { flex: 1, minHeight: 38, borderWidth: 1, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+    splitModeText: { fontSize: 14, fontWeight: '700' },
     memberRow: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     memberLabel: { fontSize: 15, fontWeight: '600' },
+    shareInput: { width: 104, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7, textAlign: 'right', fontSize: 15, fontWeight: '600' },
+    splitError: { fontSize: 13, marginTop: 2, marginBottom: 4 },
     card: {
         borderRadius: 24,
         overflow: 'hidden',

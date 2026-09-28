@@ -12,6 +12,12 @@ export interface Expense {
     currency?: string;
     splitMemberIds?: string[];
     paidByUserId?: string;
+    shares?: ExpenseShare[];
+}
+
+export interface ExpenseShare {
+    userId: string;
+    amount: string;
 }
 
 interface ServerExpense {
@@ -22,6 +28,8 @@ interface ServerExpense {
     title: string;
     date: string;
     currency: string | null;
+    paid_by_user_id: string | null;
+    shares: Array<{ user_id: string; amount: string }>;
 }
 
 function fromServer(e: ServerExpense): Expense {
@@ -33,6 +41,8 @@ function fromServer(e: ServerExpense): Expense {
         title: e.title,
         date: e.date,
         currency: e.currency || undefined,
+        paidByUserId: e.paid_by_user_id || undefined,
+        shares: e.shares.map(share => ({ userId: share.user_id, amount: share.amount })),
     };
 }
 
@@ -45,6 +55,7 @@ function toServerCreate(e: Omit<Expense, 'id'>): Record<string, unknown> {
         currency: e.currency ?? null,
         split_member_ids: e.splitMemberIds,
         paid_by_user_id: e.paidByUserId,
+        shares: e.shares?.map(share => ({ user_id: share.userId, amount: share.amount })),
     };
 }
 
