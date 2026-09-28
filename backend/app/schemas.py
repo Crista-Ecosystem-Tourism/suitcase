@@ -51,6 +51,7 @@ class SuitcaseTripOut(BaseModel):
     completed_at: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+    membership_role: Optional[Literal["owner", "member"]] = None
 
 
 class TripMemberInviteAcceptIn(BaseModel):

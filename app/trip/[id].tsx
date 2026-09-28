@@ -207,6 +207,7 @@ export default function TripDetailScreen() {
     const locale = language === 'ru' ? 'ru-RU' : 'en-US';
     const startDate = new Date(trip.startDate).toLocaleDateString(locale, { month: 'long', day: 'numeric' });
     const endDate = new Date(trip.endDate).toLocaleDateString(locale, { month: 'long', day: 'numeric', year: 'numeric' });
+    const canManageTrip = trip.membershipRole !== 'member';
 
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -255,17 +256,19 @@ export default function TripDetailScreen() {
                         <Ionicons name="chevron-back" size={24} color={colors.text} />
                     </TouchableOpacity>
 
-                    <View style={styles.headerActions}>
-                        <TouchableOpacity onPress={handleArchive} style={[styles.headerBtn, { backgroundColor: colors.card }]}>
-                            <Ionicons name={trip.isArchived ? "archive" : "archive-outline"} size={20} color={colors.primary} />
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={() => router.push(`/trip/edit/${id}`)} style={[styles.headerBtn, { backgroundColor: colors.card }]}>
-                            <Ionicons name="pencil" size={20} color={colors.primary} />
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={handleDelete} style={[styles.headerBtn, { backgroundColor: colors.card }]} disabled={deleting}>
-                            {deleting ? <ActivityIndicator size="small" color={colors.error} /> : <Ionicons name="trash" size={20} color={colors.error} />}
-                        </TouchableOpacity>
-                    </View>
+                    {canManageTrip && (
+                        <View style={styles.headerActions}>
+                            <TouchableOpacity onPress={handleArchive} style={[styles.headerBtn, { backgroundColor: colors.card }]}>
+                                <Ionicons name={trip.isArchived ? "archive" : "archive-outline"} size={20} color={colors.primary} />
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={() => router.push(`/trip/edit/${id}`)} style={[styles.headerBtn, { backgroundColor: colors.card }]}>
+                                <Ionicons name="pencil" size={20} color={colors.primary} />
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={handleDelete} style={[styles.headerBtn, { backgroundColor: colors.card }]} disabled={deleting}>
+                                {deleting ? <ActivityIndicator size="small" color={colors.error} /> : <Ionicons name="trash" size={20} color={colors.error} />}
+                            </TouchableOpacity>
+                        </View>
+                    )}
                 </View>
 
                 {/* Info Section */}
@@ -328,13 +331,15 @@ export default function TripDetailScreen() {
                                 <Ionicons name="images-outline" size={20} color={colors.success} />
                             </View>
                             <Text style={[styles.sectionTitle, { color: colors.text }]}>Photos</Text>
-                            <TouchableOpacity
-                                onPress={addPhoto}
-                                disabled={addingPhoto}
-                                style={[styles.addBtnSmall, { backgroundColor: colors.primary + '15' }]}
-                            >
-                                {addingPhoto ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="add" size={18} color={colors.primary} />}
-                            </TouchableOpacity>
+                            {canManageTrip && (
+                                <TouchableOpacity
+                                    onPress={addPhoto}
+                                    disabled={addingPhoto}
+                                    style={[styles.addBtnSmall, { backgroundColor: colors.primary + '15' }]}
+                                >
+                                    {addingPhoto ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="add" size={18} color={colors.primary} />}
+                                </TouchableOpacity>
+                            )}
                         </View>
 
                         <ScrollView
@@ -348,11 +353,13 @@ export default function TripDetailScreen() {
                                         <Image source={{ uri: p }} style={styles.photo} />
                                     </View>
                                 ))
-                            ) : (
+                            ) : canManageTrip ? (
                                 <TouchableOpacity onPress={addPhoto} style={[styles.photoPlaceholderCard, { borderColor: colors.border }]}>
                                     <Ionicons name="camera-outline" size={24} color={colors.secondaryText} />
                                     <Text style={{ color: colors.secondaryText, fontSize: 12 }}>Add first photo</Text>
                                 </TouchableOpacity>
+                            ) : (
+                                <Text style={[styles.emptyText, { color: colors.secondaryText }]}>Фото ещё не добавлены</Text>
                             )}
                         </ScrollView>
                     </View>

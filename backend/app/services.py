@@ -36,7 +36,7 @@ def _iso(dt: datetime | None) -> str | None:
     return dt.isoformat() if dt else None
 
 
-def trip_out(t: SuitcaseTrip) -> dict[str, Any]:
+def trip_out(t: SuitcaseTrip, membership_role: str | None = None) -> dict[str, Any]:
     return {
         "id": t.id,
         "country": t.country,
@@ -52,6 +52,7 @@ def trip_out(t: SuitcaseTrip) -> dict[str, Any]:
         "completed_at": _iso(t.completed_at),
         "created_at": _iso(t.created_at),
         "updated_at": _iso(t.updated_at),
+        "membership_role": membership_role,
     }
 
 
@@ -209,13 +210,17 @@ async def ensure_default_goals(db: AsyncSession, user_id: str) -> None:
 
 async def workspace(db: AsyncSession, user_id: str) -> dict[str, Any]:
     await ensure_default_goals(db, user_id)
-    trips = list(
+    trip_rows = list(
         (
             await db.execute(
-                select(SuitcaseTrip).where(SuitcaseTrip.user_id == user_id).order_by(SuitcaseTrip.start_date.desc())
+                select(SuitcaseTrip, SuitcaseTripMember.role)
+                .join(SuitcaseTripMember, SuitcaseTripMember.trip_id == SuitcaseTrip.id)
+                .where(SuitcaseTripMember.user_id == user_id)
+                .order_by(SuitcaseTrip.start_date.desc())
             )
-        ).scalars().all()
+        ).all()
     )
+    trips = [trip for trip, _ in trip_rows]
     trip_ids = [t.id for t in trips]
     expenses: list[SuitcaseExpense] = []
     if trip_ids:
@@ -230,7 +235,7 @@ async def workspace(db: AsyncSession, user_id: str) -> dict[str, Any]:
         ).scalars().all()
     )
     return {
-        "trips": [trip_out(t) for t in trips],
+        "trips": [trip_out(trip, role) for trip, role in trip_rows],
         "expenses": [expense_out(e) for e in expenses],
         "goals": [goal_out(g) for g in goals],
     }
@@ -314,7 +319,7 @@ async def delete_trip(
 
 
 async def create_expense(db: AsyncSession, user_id: str, trip_id: str, data: dict[str, Any]) -> dict[str, Any] | None:
-    if not await get_trip_owned(db, trip_id, user_id):
+    if not await get_trip_membership(db, trip_id, user_id):
         return None
     client_request_id = data.pop("client_request_id", None)
     if client_request_id:
@@ -354,8 +359,7 @@ async def update_expense(db: AsyncSession, expense_id: str, user_id: str, data: 
     expense = (await db.execute(select(SuitcaseExpense).where(SuitcaseExpense.id == expense_id))).scalar_one_or_none()
     if not expense:
         return None
-    trip = await get_trip_owned(db, expense.trip_id, user_id)
-    if not trip:
+    if not await get_trip_membership(db, expense.trip_id, user_id):
         return None
     expected_updated_at = data.pop("base_updated_at", None)
     if expected_updated_at is not None and expected_updated_at != _iso(expense.updated_at):
@@ -377,7 +381,7 @@ async def delete_expense(
     expense = (await db.execute(select(SuitcaseExpense).where(SuitcaseExpense.id == expense_id))).scalar_one_or_none()
     if not expense:
         return False
-    if not await get_trip_owned(db, expense.trip_id, user_id):
+    if not await get_trip_membership(db, expense.trip_id, user_id):
         return False
     if expected_updated_at is not None and expected_updated_at != _iso(expense.updated_at):
         raise StaleWriteError

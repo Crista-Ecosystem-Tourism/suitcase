@@ -15,6 +15,7 @@ export interface Trip {
     photos?: string[];
     isArchived?: boolean;
     createdAt?: string;
+    membershipRole?: 'owner' | 'member';
 }
 
 interface ServerTrip {
@@ -31,6 +32,7 @@ interface ServerTrip {
     is_archived: boolean;
     created_at: string | null;
     updated_at: string | null;
+    membership_role: 'owner' | 'member' | null;
 }
 
 function fromServer(t: ServerTrip): Trip {
@@ -47,6 +49,7 @@ function fromServer(t: ServerTrip): Trip {
         photos: t.photos || undefined,
         isArchived: t.is_archived,
         createdAt: t.created_at || undefined,
+        membershipRole: t.membership_role || undefined,
     };
 }
 
