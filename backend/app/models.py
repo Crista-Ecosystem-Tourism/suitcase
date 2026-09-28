@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, MetaData, Numeric, String, Text
@@ -117,6 +118,23 @@ class SuitcaseExpense(Base, TimestampMixin):
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     date: Mapped[str] = mapped_column(String(32), nullable=False)
     currency: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+    paid_by_user_id: Mapped[str] = mapped_column(String, nullable=False)
+    created_by_user_id: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class SuitcaseExpenseShare(Base):
+    __tablename__ = "suitcase_expense_share"
+
+    expense_id: Mapped[str] = mapped_column(
+        ForeignKey("suitcase_expense.id", ondelete="CASCADE"), primary_key=True,
+    )
+    # Identity is owned by ai_agent; the migration provides the database FK.
+    user_id: Mapped[str] = mapped_column(String, primary_key=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="amount_positive"),
+    )
 
 
 class SuitcaseGoal(Base, TimestampMixin):

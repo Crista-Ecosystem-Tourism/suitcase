@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -75,21 +76,34 @@ class TripMemberOut(BaseModel):
     joined_at: str
 
 
+class ExpenseShareAmountIn(BaseModel):
+    user_id: str = Field(min_length=1, max_length=255)
+    amount: Decimal = Field(gt=0, max_digits=18, decimal_places=4)
+
+
 class SuitcaseExpenseCreate(ClientRequestBody):
-    amount: float
+    amount: Decimal = Field(gt=0, max_digits=18, decimal_places=4)
     category: str
     title: str
     date: str
     currency: Optional[str] = None
+    paid_by_user_id: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    split_member_ids: Optional[list[str]] = Field(default=None, min_length=1, max_length=50)
+    shares: Optional[list[ExpenseShareAmountIn]] = Field(default=None, min_length=1, max_length=50)
 
 
 class SuitcaseExpensePatch(BaseModel):
     base_updated_at: Optional[str] = Field(default=None, max_length=64)
-    amount: Optional[float] = None
+    amount: Optional[Decimal] = Field(default=None, gt=0, max_digits=18, decimal_places=4)
     category: Optional[str] = None
     title: Optional[str] = None
     date: Optional[str] = None
     currency: Optional[str] = None
+
+
+class ExpenseShareOut(BaseModel):
+    user_id: str
+    amount: str
 
 
 class SuitcaseExpenseOut(BaseModel):
@@ -100,10 +114,11 @@ class SuitcaseExpenseOut(BaseModel):
     title: str
     date: str
     currency: Optional[str] = None
+    paid_by_user_id: Optional[str] = None
+    created_by_user_id: Optional[str] = None
+    shares: list[ExpenseShareOut] = Field(default_factory=list)
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
-
-
 class SuitcaseGoalCreate(ClientRequestBody):
     title: str
     current: int = 0

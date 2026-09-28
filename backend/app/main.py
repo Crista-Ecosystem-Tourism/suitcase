@@ -48,6 +48,7 @@ from app.services import (
     update_trip,
     workspace,
     StaleWriteError,
+    InvalidExpenseSplitError,
 )
 from app.mini_sites import complete_trip, get_mini_site, publish_mini_site, read_public_mini_site, revoke_mini_site
 from app.mini_site_html import render_missing_mini_site_html, render_public_mini_site_html
@@ -297,6 +298,8 @@ async def post_expense(
 ) -> SuitcaseExpenseOut:
     try:
         row = await create_expense(db, user["sub"], trip_id, payload.model_dump(exclude_unset=True))
+    except InvalidExpenseSplitError as exc:
+        raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(exc))
     except ValueError:
         raise HTTPException(status_code=HTTP_409_CONFLICT, detail="Идентификатор операции уже занят")
     if not row:
@@ -315,6 +318,8 @@ async def patch_expense(
         row = await update_expense(db, expense_id, user["sub"], payload.model_dump(exclude_unset=True))
     except StaleWriteError:
         raise HTTPException(status_code=HTTP_409_CONFLICT, detail="Данные изменились на другом устройстве")
+    except InvalidExpenseSplitError as exc:
+        raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(exc))
     if not row:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Расход не найден")
     return SuitcaseExpenseOut(**row)

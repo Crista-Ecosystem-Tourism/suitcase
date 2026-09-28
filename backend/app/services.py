@@ -4,14 +4,21 @@ import uuid
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 from typing import Any
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import SuitcaseExpense, SuitcaseGoal, SuitcaseTrip, SuitcaseTripMember, SuitcaseTripMemberInvite
+from app.models import (
+    SuitcaseExpense,
+    SuitcaseExpenseShare,
+    SuitcaseGoal,
+    SuitcaseTrip,
+    SuitcaseTripMember,
+    SuitcaseTripMemberInvite,
+)
 
 DEFAULT_SUITCASE_GOALS: list[dict[str, Any]] = [
     {"title": "Стран посещено", "current": 0, "total": 30, "color": "#007AFF"},
@@ -25,7 +32,12 @@ class StaleWriteError(ValueError):
     """The client edited a version that has changed on another device."""
 
 
+class InvalidExpenseSplitError(ValueError):
+    """The payer or shares do not describe an exact valid trip split."""
+
+
 INVITE_LIFETIME = timedelta(days=7)
+MONEY_QUANTUM = Decimal("0.0001")
 
 
 def _invite_token_hash(invite_code: str) -> str:
@@ -56,7 +68,7 @@ def trip_out(t: SuitcaseTrip, membership_role: str | None = None) -> dict[str, A
     }
 
 
-def expense_out(e: SuitcaseExpense) -> dict[str, Any]:
+def expense_out(e: SuitcaseExpense, shares: list[SuitcaseExpenseShare] | None = None) -> dict[str, Any]:
     amount = e.amount
     if isinstance(amount, Decimal):
         amount = float(amount)
@@ -68,6 +80,12 @@ def expense_out(e: SuitcaseExpense) -> dict[str, Any]:
         "title": e.title,
         "date": e.date,
         "currency": e.currency,
+        "paid_by_user_id": e.paid_by_user_id,
+        "created_by_user_id": e.created_by_user_id,
+        "shares": [
+            {"user_id": share.user_id, "amount": format(share.amount, "f")}
+            for share in (shares or [])
+        ],
         "created_at": _iso(e.created_at),
         "updated_at": _iso(e.updated_at),
     }
@@ -102,6 +120,51 @@ async def get_trip_owned(db: AsyncSession, trip_id: str, user_id: str) -> Suitca
 
 async def get_trip_membership(db: AsyncSession, trip_id: str, user_id: str) -> SuitcaseTripMember | None:
     return await db.get(SuitcaseTripMember, {"trip_id": trip_id, "user_id": user_id})
+
+
+async def _trip_member_ids(db: AsyncSession, trip_id: str) -> set[str]:
+    return set(
+        (await db.scalars(
+            select(SuitcaseTripMember.user_id).where(SuitcaseTripMember.trip_id == trip_id)
+        )).all()
+    )
+
+
+def _equal_shares(amount: Decimal, user_ids: list[str]) -> list[tuple[str, Decimal]]:
+    base = (amount / len(user_ids)).quantize(MONEY_QUANTUM, rounding=ROUND_DOWN)
+    remainder = amount - base * len(user_ids)
+    return [
+        (user_id, base + remainder if index == 0 else base)
+        for index, user_id in enumerate(user_ids)
+    ]
+
+
+def _normalized_expense_shares(
+    amount: Decimal,
+    payer_id: str,
+    data: dict[str, Any],
+    member_ids: set[str],
+) -> list[tuple[str, Decimal]]:
+    custom_shares = data.get("shares")
+    split_member_ids = data.get("split_member_ids")
+    if custom_shares is not None and split_member_ids is not None:
+        raise InvalidExpenseSplitError("choose either equal or custom shares")
+    if custom_shares is not None:
+        values = [(item["user_id"], Decimal(str(item["amount"]))) for item in custom_shares]
+        if len({user_id for user_id, _ in values}) != len(values):
+            raise InvalidExpenseSplitError("a participant can have only one share")
+        if any(share <= 0 for _, share in values) or sum(share for _, share in values) != amount:
+            raise InvalidExpenseSplitError("shares must exactly match the expense amount")
+    elif split_member_ids is not None:
+        if len(set(split_member_ids)) != len(split_member_ids):
+            raise InvalidExpenseSplitError("a participant can have only one share")
+        values = _equal_shares(amount, list(split_member_ids))
+    else:
+        values = [(payer_id, amount)]
+    participant_ids = {user_id for user_id, _ in values}
+    if payer_id not in member_ids or not participant_ids.issubset(member_ids):
+        raise InvalidExpenseSplitError("expense participants must belong to the trip")
+    return values
 
 
 async def list_trip_members(db: AsyncSession, trip_id: str, user_id: str) -> list[dict[str, str]] | None:
@@ -227,6 +290,13 @@ async def workspace(db: AsyncSession, user_id: str) -> dict[str, Any]:
         expenses = list(
             (await db.execute(select(SuitcaseExpense).where(SuitcaseExpense.trip_id.in_(trip_ids)))).scalars().all()
         )
+    expense_ids = [expense.id for expense in expenses]
+    shares_by_expense: dict[str, list[SuitcaseExpenseShare]] = {}
+    if expense_ids:
+        for share in (
+            await db.scalars(select(SuitcaseExpenseShare).where(SuitcaseExpenseShare.expense_id.in_(expense_ids)))
+        ).all():
+            shares_by_expense.setdefault(share.expense_id, []).append(share)
     goals = list(
         (
             await db.execute(
@@ -236,7 +306,7 @@ async def workspace(db: AsyncSession, user_id: str) -> dict[str, Any]:
     )
     return {
         "trips": [trip_out(trip, role) for trip, role in trip_rows],
-        "expenses": [expense_out(e) for e in expenses],
+        "expenses": [expense_out(expense, shares_by_expense.get(expense.id)) for expense in expenses],
         "goals": [goal_out(g) for g in goals],
     }
 
@@ -327,20 +397,36 @@ async def create_expense(db: AsyncSession, user_id: str, trip_id: str, data: dic
         if existing:
             if existing.trip_id != trip_id:
                 raise ValueError("client request ID already belongs to another expense")
-            return expense_out(existing)
+            shares = list(
+                (await db.scalars(
+                    select(SuitcaseExpenseShare).where(SuitcaseExpenseShare.expense_id == existing.id)
+                )).all()
+            )
+            return expense_out(existing, shares)
+    amount = Decimal(str(data["amount"]))
+    payer_id = data.get("paid_by_user_id") or user_id
+    shares = _normalized_expense_shares(amount, payer_id, data, await _trip_member_ids(db, trip_id))
     now = datetime.now(timezone.utc)
     expense = SuitcaseExpense(
         id=client_request_id or uuid.uuid4().hex,
         trip_id=trip_id,
-        amount=float(data["amount"]),
+        amount=amount,
         category=data["category"],
         title=data["title"],
         date=data["date"],
         currency=data.get("currency"),
+        paid_by_user_id=payer_id,
+        created_by_user_id=user_id,
         created_at=now,
         updated_at=now,
     )
     db.add(expense)
+    for participant_id, share_amount in shares:
+        db.add(SuitcaseExpenseShare(
+            expense_id=expense.id,
+            user_id=participant_id,
+            amount=share_amount,
+        ))
     try:
         await db.commit()
     except IntegrityError:
@@ -349,10 +435,17 @@ async def create_expense(db: AsyncSession, user_id: str, trip_id: str, data: dic
             raise
         existing = await db.get(SuitcaseExpense, client_request_id)
         if existing and existing.trip_id == trip_id:
-            return expense_out(existing)
+            existing_shares = list(
+                (await db.scalars(
+                    select(SuitcaseExpenseShare).where(SuitcaseExpenseShare.expense_id == existing.id)
+                )).all()
+            )
+            return expense_out(existing, existing_shares)
         raise ValueError("client request ID already belongs to another expense")
     await db.refresh(expense)
-    return expense_out(expense)
+    return expense_out(expense, list((await db.scalars(
+        select(SuitcaseExpenseShare).where(SuitcaseExpenseShare.expense_id == expense.id)
+    )).all()))
 
 
 async def update_expense(db: AsyncSession, expense_id: str, user_id: str, data: dict[str, Any]) -> dict[str, Any] | None:
@@ -364,12 +457,22 @@ async def update_expense(db: AsyncSession, expense_id: str, user_id: str, data: 
     expected_updated_at = data.pop("base_updated_at", None)
     if expected_updated_at is not None and expected_updated_at != _iso(expense.updated_at):
         raise StaleWriteError
+    shares = list(
+        (await db.scalars(
+            select(SuitcaseExpenseShare).where(SuitcaseExpenseShare.expense_id == expense.id)
+        )).all()
+    )
+    if "amount" in data:
+        updated_amount = Decimal(str(data["amount"]))
+        if len(shares) != 1 or shares[0].user_id != expense.paid_by_user_id:
+            raise InvalidExpenseSplitError("update the split together with a shared expense amount")
+        shares[0].amount = updated_amount
     for key, value in data.items():
-        setattr(expense, key, float(value) if key == "amount" else value)
+        setattr(expense, key, Decimal(str(value)) if key == "amount" else value)
     expense.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(expense)
-    return expense_out(expense)
+    return expense_out(expense, shares)
 
 
 async def delete_expense(
