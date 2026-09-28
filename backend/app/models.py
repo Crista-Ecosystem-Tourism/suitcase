@@ -70,6 +70,39 @@ class SuitcaseTripPublication(Base, TimestampMixin):
     )
 
 
+class SuitcaseTripMember(Base):
+    __tablename__ = "suitcase_trip_member"
+
+    trip_id: Mapped[str] = mapped_column(
+        ForeignKey("suitcase_trip.id", ondelete="CASCADE"), primary_key=True,
+    )
+    # Identity is owned by ai_agent; its foreign key is retained in the
+    # migration without coupling this standalone ORM to the auth metadata.
+    user_id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+    __table_args__ = (
+        CheckConstraint("role IN ('owner', 'member')", name="role_allowed"),
+    )
+
+
+class SuitcaseTripMemberInvite(Base):
+    __tablename__ = "suitcase_trip_member_invite"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    trip_id: Mapped[str] = mapped_column(
+        ForeignKey("suitcase_trip.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    created_by_user_id: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    accepted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    accepted_by_user_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class SuitcaseExpense(Base, TimestampMixin):
     __tablename__ = "suitcase_expense"
 

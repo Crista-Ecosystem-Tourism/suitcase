@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+import hashlib
+import secrets
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -9,7 +11,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import SuitcaseExpense, SuitcaseGoal, SuitcaseTrip
+from app.models import SuitcaseExpense, SuitcaseGoal, SuitcaseTrip, SuitcaseTripMember, SuitcaseTripMemberInvite
 
 DEFAULT_SUITCASE_GOALS: list[dict[str, Any]] = [
     {"title": "Стран посещено", "current": 0, "total": 30, "color": "#007AFF"},
@@ -21,6 +23,13 @@ DEFAULT_SUITCASE_GOALS: list[dict[str, Any]] = [
 
 class StaleWriteError(ValueError):
     """The client edited a version that has changed on another device."""
+
+
+INVITE_LIFETIME = timedelta(days=7)
+
+
+def _invite_token_hash(invite_code: str) -> str:
+    return hashlib.sha256(invite_code.encode("utf-8")).hexdigest()
 
 
 def _iso(dt: datetime | None) -> str | None:
@@ -75,11 +84,115 @@ def goal_out(g: SuitcaseGoal) -> dict[str, Any]:
     }
 
 
+def trip_member_out(member: SuitcaseTripMember) -> dict[str, str]:
+    return {
+        "user_id": member.user_id,
+        "role": member.role,
+        "joined_at": _iso(member.joined_at) or "",
+    }
+
+
 async def get_trip_owned(db: AsyncSession, trip_id: str, user_id: str) -> SuitcaseTrip | None:
     trip = (await db.execute(select(SuitcaseTrip).where(SuitcaseTrip.id == trip_id))).scalar_one_or_none()
     if not trip or trip.user_id != user_id:
         return None
     return trip
+
+
+async def get_trip_membership(db: AsyncSession, trip_id: str, user_id: str) -> SuitcaseTripMember | None:
+    return await db.get(SuitcaseTripMember, {"trip_id": trip_id, "user_id": user_id})
+
+
+async def list_trip_members(db: AsyncSession, trip_id: str, user_id: str) -> list[dict[str, str]] | None:
+    if not await get_trip_membership(db, trip_id, user_id):
+        return None
+    members = list(
+        (
+            await db.execute(
+                select(SuitcaseTripMember)
+                .where(SuitcaseTripMember.trip_id == trip_id)
+                .order_by(SuitcaseTripMember.joined_at.asc())
+            )
+        ).scalars().all()
+    )
+    return [trip_member_out(member) for member in members]
+
+
+async def create_trip_member_invite(
+    db: AsyncSession, trip_id: str, owner_id: str,
+) -> dict[str, str] | None:
+    if not await get_trip_owned(db, trip_id, owner_id):
+        return None
+    now = datetime.now(timezone.utc)
+    invite_code = secrets.token_urlsafe(32)
+    invite = SuitcaseTripMemberInvite(
+        id=uuid.uuid4().hex,
+        trip_id=trip_id,
+        token_hash=_invite_token_hash(invite_code),
+        created_by_user_id=owner_id,
+        created_at=now,
+        expires_at=now + INVITE_LIFETIME,
+    )
+    db.add(invite)
+    await db.commit()
+    return {
+        "id": invite.id,
+        "invite_code": invite_code,
+        "expires_at": invite.expires_at.isoformat(),
+    }
+
+
+async def accept_trip_member_invite(
+    db: AsyncSession, user_id: str, invite_code: str,
+) -> dict[str, Any] | None:
+    invite = await db.scalar(
+        select(SuitcaseTripMemberInvite)
+        .where(SuitcaseTripMemberInvite.token_hash == _invite_token_hash(invite_code))
+        .with_for_update()
+    )
+    now = datetime.now(timezone.utc)
+    if (
+        invite is None
+        or invite.revoked_at is not None
+        or invite.expires_at <= now
+        or invite.created_by_user_id == user_id
+        or (invite.accepted_at is not None and invite.accepted_by_user_id != user_id)
+    ):
+        return None
+    if invite.accepted_at is not None:
+        return {"trip_id": invite.trip_id, "created": False}
+
+    member = await get_trip_membership(db, invite.trip_id, user_id)
+    if member is None:
+        db.add(SuitcaseTripMember(
+            trip_id=invite.trip_id,
+            user_id=user_id,
+            role="member",
+            joined_at=now,
+        ))
+    invite.accepted_at = now
+    invite.accepted_by_user_id = user_id
+    await db.commit()
+    return {"trip_id": invite.trip_id, "created": member is None}
+
+
+async def revoke_trip_member_invite(
+    db: AsyncSession, trip_id: str, invite_id: str, owner_id: str,
+) -> bool:
+    if not await get_trip_owned(db, trip_id, owner_id):
+        return False
+    invite = await db.scalar(
+        select(SuitcaseTripMemberInvite).where(
+            SuitcaseTripMemberInvite.id == invite_id,
+            SuitcaseTripMemberInvite.trip_id == trip_id,
+        ).with_for_update()
+    )
+    if invite is None or invite.accepted_at is not None:
+        return False
+    if invite.revoked_at is None:
+        invite.revoked_at = datetime.now(timezone.utc)
+        await db.commit()
+    return True
 
 
 async def ensure_default_goals(db: AsyncSession, user_id: str) -> None:
@@ -149,6 +262,12 @@ async def create_trip(db: AsyncSession, user_id: str, data: dict[str, Any]) -> d
         updated_at=now,
     )
     db.add(trip)
+    db.add(SuitcaseTripMember(
+        trip_id=trip.id,
+        user_id=user_id,
+        role="owner",
+        joined_at=now,
+    ))
     try:
         await db.commit()
     except IntegrityError:

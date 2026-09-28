@@ -53,6 +53,27 @@ class SuitcaseTripOut(BaseModel):
     updated_at: Optional[str] = None
 
 
+class TripMemberInviteAcceptIn(BaseModel):
+    invite_code: str = Field(min_length=32, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+
+
+class TripMemberInviteOut(BaseModel):
+    id: str
+    invite_code: str
+    expires_at: str
+
+
+class TripMemberInviteAcceptOut(BaseModel):
+    trip_id: str
+    created: bool
+
+
+class TripMemberOut(BaseModel):
+    user_id: str
+    role: Literal["owner", "member"]
+    joined_at: str
+
+
 class SuitcaseExpenseCreate(ClientRequestBody):
     amount: float
     category: str

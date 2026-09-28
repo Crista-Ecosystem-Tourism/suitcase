@@ -22,6 +22,10 @@ from app.schemas import (
     SuitcaseTripOut,
     SuitcaseTripPatch,
     SuitcaseWorkspaceOut,
+    TripMemberInviteAcceptIn,
+    TripMemberInviteAcceptOut,
+    TripMemberInviteOut,
+    TripMemberOut,
     MiniSiteOwnerOut,
     MiniSiteCompleteRequest,
     MiniSitePublishRequest,
@@ -31,10 +35,14 @@ from app.security import get_current_user
 from app.services import (
     create_expense,
     create_goal,
+    create_trip_member_invite,
     create_trip,
     delete_expense,
     delete_goal,
     delete_trip,
+    accept_trip_member_invite,
+    list_trip_members,
+    revoke_trip_member_invite,
     update_expense,
     update_goal,
     update_trip,
@@ -122,6 +130,55 @@ async def remove_trip(
     if not ok:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Поездка не найдена")
     return {"ok": True}
+
+
+@app.get("/suitcase/trips/{trip_id}/members", response_model=list[TripMemberOut])
+async def get_trip_members(
+    trip_id: str,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[TripMemberOut]:
+    members = await list_trip_members(db, trip_id, user["sub"])
+    if members is None:
+        raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Поездка не найдена")
+    return [TripMemberOut(**member) for member in members]
+
+
+@app.post("/suitcase/trips/{trip_id}/member-invites", response_model=TripMemberInviteOut)
+async def post_trip_member_invite(
+    trip_id: str,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> TripMemberInviteOut:
+    invite = await create_trip_member_invite(db, trip_id, user["sub"])
+    if invite is None:
+        raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Поездка не найдена")
+    return TripMemberInviteOut(**invite)
+
+
+@app.delete("/suitcase/trips/{trip_id}/member-invites/{invite_id}")
+async def delete_trip_member_invite(
+    trip_id: str,
+    invite_id: str,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, bool]:
+    revoked = await revoke_trip_member_invite(db, trip_id, invite_id, user["sub"])
+    if not revoked:
+        raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Приглашение не найдено")
+    return {"ok": True}
+
+
+@app.post("/suitcase/member-invites/accept", response_model=TripMemberInviteAcceptOut)
+async def post_accept_trip_member_invite(
+    payload: TripMemberInviteAcceptIn,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> TripMemberInviteAcceptOut:
+    result = await accept_trip_member_invite(db, user["sub"], payload.invite_code)
+    if result is None:
+        raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Приглашение недоступно")
+    return TripMemberInviteAcceptOut(**result)
 
 
 @app.get("/suitcase/trips/{trip_id}/mini-site", response_model=MiniSiteOwnerOut)
