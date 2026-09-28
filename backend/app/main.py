@@ -26,6 +26,9 @@ from app.schemas import (
     TripMemberInviteAcceptOut,
     TripMemberInviteOut,
     TripMemberOut,
+    SettlementCreate,
+    SettlementOut,
+    TripSplitSummaryOut,
     MiniSiteOwnerOut,
     MiniSiteCompleteRequest,
     MiniSitePublishRequest,
@@ -43,12 +46,15 @@ from app.services import (
     accept_trip_member_invite,
     list_trip_members,
     revoke_trip_member_invite,
+    create_settlement,
+    trip_split_summary,
     update_expense,
     update_goal,
     update_trip,
     workspace,
     StaleWriteError,
     InvalidExpenseSplitError,
+    InvalidSettlementError,
 )
 from app.mini_sites import complete_trip, get_mini_site, publish_mini_site, read_public_mini_site, revoke_mini_site
 from app.mini_site_html import render_missing_mini_site_html, render_public_mini_site_html
@@ -180,6 +186,34 @@ async def post_accept_trip_member_invite(
     if result is None:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Приглашение недоступно")
     return TripMemberInviteAcceptOut(**result)
+
+
+@app.get("/suitcase/trips/{trip_id}/split-summary", response_model=TripSplitSummaryOut)
+async def get_trip_split_summary(
+    trip_id: str,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> TripSplitSummaryOut:
+    summary = await trip_split_summary(db, trip_id, user["sub"])
+    if summary is None:
+        raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Поездка не найдена")
+    return TripSplitSummaryOut(**summary)
+
+
+@app.post("/suitcase/trips/{trip_id}/settlements", response_model=SettlementOut)
+async def post_trip_settlement(
+    trip_id: str,
+    payload: SettlementCreate,
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SettlementOut:
+    try:
+        settlement = await create_settlement(db, trip_id, user["sub"], payload.model_dump())
+    except InvalidSettlementError as exc:
+        raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(exc))
+    if settlement is None:
+        raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Поездка не найдена")
+    return SettlementOut(**settlement)
 
 
 @app.get("/suitcase/trips/{trip_id}/mini-site", response_model=MiniSiteOwnerOut)

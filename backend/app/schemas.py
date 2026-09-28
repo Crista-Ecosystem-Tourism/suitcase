@@ -106,6 +106,42 @@ class ExpenseShareOut(BaseModel):
     amount: str
 
 
+class SettlementCreate(BaseModel):
+    to_user_id: str = Field(min_length=1, max_length=255)
+    amount: Decimal = Field(gt=0, max_digits=18, decimal_places=4)
+    currency: str = Field(min_length=1, max_length=8)
+
+
+class SettlementOut(BaseModel):
+    id: str
+    from_user_id: str
+    to_user_id: str
+    amount: str
+    currency: str
+    settled_at: str
+
+
+class TripBalanceOut(BaseModel):
+    user_id: str
+    amount: str
+
+
+class SettlementSuggestionOut(BaseModel):
+    from_user_id: str
+    to_user_id: str
+    amount: str
+
+
+class CurrencySplitSummaryOut(BaseModel):
+    currency: str
+    balances: list[TripBalanceOut]
+    suggested_settlements: list[SettlementSuggestionOut]
+
+
+class TripSplitSummaryOut(BaseModel):
+    currencies: list[CurrencySplitSummaryOut]
+
+
 class SuitcaseExpenseOut(BaseModel):
     id: str
     trip_id: str

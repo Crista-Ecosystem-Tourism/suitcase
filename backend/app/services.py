@@ -15,6 +15,7 @@ from app.models import (
     SuitcaseExpense,
     SuitcaseExpenseShare,
     SuitcaseGoal,
+    SuitcaseSettlement,
     SuitcaseTrip,
     SuitcaseTripMember,
     SuitcaseTripMemberInvite,
@@ -34,6 +35,10 @@ class StaleWriteError(ValueError):
 
 class InvalidExpenseSplitError(ValueError):
     """The payer or shares do not describe an exact valid trip split."""
+
+
+class InvalidSettlementError(ValueError):
+    """A settlement would not reduce the sender's current trip debt."""
 
 
 INVITE_LIFETIME = timedelta(days=7)
@@ -167,6 +172,33 @@ def _normalized_expense_shares(
     return values
 
 
+def _decimal_text(amount: Decimal) -> str:
+    return format(amount, "f")
+
+
+def _suggest_settlements(balances: dict[str, Decimal]) -> list[dict[str, str]]:
+    debtors = [[user_id, -amount] for user_id, amount in sorted(balances.items()) if amount < 0]
+    creditors = [[user_id, amount] for user_id, amount in sorted(balances.items()) if amount > 0]
+    suggestions: list[dict[str, str]] = []
+    debtor_index = creditor_index = 0
+    while debtor_index < len(debtors) and creditor_index < len(creditors):
+        debtor_id, debt = debtors[debtor_index]
+        creditor_id, credit = creditors[creditor_index]
+        settled = min(debt, credit)
+        suggestions.append({
+            "from_user_id": debtor_id,
+            "to_user_id": creditor_id,
+            "amount": _decimal_text(settled),
+        })
+        debtors[debtor_index][1] -= settled
+        creditors[creditor_index][1] -= settled
+        if debtors[debtor_index][1] == 0:
+            debtor_index += 1
+        if creditors[creditor_index][1] == 0:
+            creditor_index += 1
+    return suggestions
+
+
 async def list_trip_members(db: AsyncSession, trip_id: str, user_id: str) -> list[dict[str, str]] | None:
     if not await get_trip_membership(db, trip_id, user_id):
         return None
@@ -180,6 +212,103 @@ async def list_trip_members(db: AsyncSession, trip_id: str, user_id: str) -> lis
         ).scalars().all()
     )
     return [trip_member_out(member) for member in members]
+
+
+async def trip_split_summary(db: AsyncSession, trip_id: str, user_id: str) -> dict[str, Any] | None:
+    if not await get_trip_membership(db, trip_id, user_id):
+        return None
+    member_ids = await _trip_member_ids(db, trip_id)
+    balances_by_currency: dict[str, dict[str, Decimal]] = {}
+    expenses = list(
+        (await db.scalars(select(SuitcaseExpense).where(SuitcaseExpense.trip_id == trip_id))).all()
+    )
+    expense_ids = [expense.id for expense in expenses]
+    shares_by_expense: dict[str, list[SuitcaseExpenseShare]] = {}
+    if expense_ids:
+        for share in (
+            await db.scalars(select(SuitcaseExpenseShare).where(SuitcaseExpenseShare.expense_id.in_(expense_ids)))
+        ).all():
+            shares_by_expense.setdefault(share.expense_id, []).append(share)
+    for expense in expenses:
+        currency = expense.currency or "RUB"
+        balances = balances_by_currency.setdefault(currency, {member_id: Decimal("0") for member_id in member_ids})
+        balances[expense.paid_by_user_id] = balances.get(expense.paid_by_user_id, Decimal("0")) + Decimal(str(expense.amount))
+        for share in shares_by_expense.get(expense.id, []):
+            balances[share.user_id] = balances.get(share.user_id, Decimal("0")) - Decimal(str(share.amount))
+    settlements = list(
+        (await db.scalars(select(SuitcaseSettlement).where(SuitcaseSettlement.trip_id == trip_id))).all()
+    )
+    for settlement in settlements:
+        balances = balances_by_currency.setdefault(
+            settlement.currency, {member_id: Decimal("0") for member_id in member_ids},
+        )
+        amount = Decimal(str(settlement.amount))
+        balances[settlement.from_user_id] = balances.get(settlement.from_user_id, Decimal("0")) + amount
+        balances[settlement.to_user_id] = balances.get(settlement.to_user_id, Decimal("0")) - amount
+    return {
+        "currencies": [
+            {
+                "currency": currency,
+                "balances": [
+                    {"user_id": member_id, "amount": _decimal_text(amount)}
+                    for member_id, amount in sorted(balances.items())
+                ],
+                "suggested_settlements": _suggest_settlements(balances),
+            }
+            for currency, balances in sorted(balances_by_currency.items())
+        ],
+    }
+
+
+async def create_settlement(
+    db: AsyncSession, trip_id: str, from_user_id: str, data: dict[str, Any],
+) -> dict[str, str] | None:
+    if not await get_trip_membership(db, trip_id, from_user_id):
+        return None
+    # Serialize debt reductions per trip so concurrent confirmations cannot
+    # settle the same outstanding balance twice.
+    trip = await db.scalar(
+        select(SuitcaseTrip).where(SuitcaseTrip.id == trip_id).with_for_update()
+    )
+    if trip is None:
+        return None
+    to_user_id = data["to_user_id"]
+    amount = Decimal(str(data["amount"]))
+    currency = data["currency"].upper()
+    if to_user_id == from_user_id or to_user_id not in await _trip_member_ids(db, trip_id):
+        raise InvalidSettlementError("settlement participants must belong to the trip")
+    summary = await trip_split_summary(db, trip_id, from_user_id)
+    assert summary is not None
+    currency_summary = next((item for item in summary["currencies"] if item["currency"] == currency), None)
+    current_balances = {
+        item["user_id"]: Decimal(item["amount"])
+        for item in (currency_summary or {"balances": []})["balances"]
+    }
+    if current_balances.get(from_user_id, Decimal("0")) + amount > 0:
+        raise InvalidSettlementError("settlement exceeds the sender's outstanding debt")
+    if current_balances.get(to_user_id, Decimal("0")) - amount < 0:
+        raise InvalidSettlementError("settlement exceeds the recipient's credit")
+    now = datetime.now(timezone.utc)
+    settlement = SuitcaseSettlement(
+        id=uuid.uuid4().hex,
+        trip_id=trip_id,
+        from_user_id=from_user_id,
+        to_user_id=to_user_id,
+        amount=amount,
+        currency=currency,
+        created_by_user_id=from_user_id,
+        settled_at=now,
+    )
+    db.add(settlement)
+    await db.commit()
+    return {
+        "id": settlement.id,
+        "from_user_id": settlement.from_user_id,
+        "to_user_id": settlement.to_user_id,
+        "amount": _decimal_text(settlement.amount),
+        "currency": settlement.currency,
+        "settled_at": settlement.settled_at.isoformat(),
+    }
 
 
 async def create_trip_member_invite(

@@ -137,6 +137,26 @@ class SuitcaseExpenseShare(Base):
     )
 
 
+class SuitcaseSettlement(Base):
+    __tablename__ = "suitcase_settlement"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    trip_id: Mapped[str] = mapped_column(
+        ForeignKey("suitcase_trip.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    from_user_id: Mapped[str] = mapped_column(String, nullable=False)
+    to_user_id: Mapped[str] = mapped_column(String, nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False)
+    created_by_user_id: Mapped[str] = mapped_column(String, nullable=False)
+    settled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="amount_positive"),
+        CheckConstraint("from_user_id <> to_user_id", name="different_participants"),
+    )
+
+
 class SuitcaseGoal(Base, TimestampMixin):
     __tablename__ = "suitcase_goal"
 
