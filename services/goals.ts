@@ -9,7 +9,7 @@ import {
     writeWorkspaceSnapshot,
 } from './offline';
 
-export interface SuitcaseGoal {
+export interface SuitcaseGoal extends Record<string, unknown> {
     id: string;
     title: string;
     current: number;
@@ -17,12 +17,14 @@ export interface SuitcaseGoal {
     color: string;
 }
 
+type NewSuitcaseGoal = Pick<SuitcaseGoal, 'title' | 'current' | 'total' | 'color'>;
+
 export async function getGoals(): Promise<SuitcaseGoal[]> {
     const workspace = await apiGet<{ goals: SuitcaseGoal[] }>('/suitcase/workspace');
     return workspace.goals;
 }
 
-export async function createGoal(goal: Omit<SuitcaseGoal, 'id'>): Promise<SuitcaseGoal> {
+export async function createGoal(goal: NewSuitcaseGoal): Promise<SuitcaseGoal> {
     const clientRequestId = createClientRequestId();
     const body = { ...goal, client_request_id: clientRequestId };
     try {
@@ -38,7 +40,7 @@ export async function createGoal(goal: Omit<SuitcaseGoal, 'id'>): Promise<Suitca
     }
 }
 
-export async function updateGoal(id: string, goal: Partial<Omit<SuitcaseGoal, 'id'>>): Promise<SuitcaseGoal> {
+export async function updateGoal(id: string, goal: Partial<NewSuitcaseGoal>): Promise<SuitcaseGoal> {
     const path = `/suitcase/goals/${id}`;
     const user = await getStoredUser();
     const workspace = user ? await readWorkspaceSnapshot(user.id) : null;

@@ -20,7 +20,7 @@ export interface ExpenseShare {
     amount: string;
 }
 
-interface ServerExpense {
+interface ServerExpense extends Record<string, unknown> {
     id: string;
     trip_id: string;
     amount: number;

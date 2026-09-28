@@ -99,9 +99,13 @@ export async function resolveOfflineConflict(
     resolution: 'keep-local' | 'keep-server',
 ): Promise<void> {
     const queue = await readOfflineMutations(userId);
-    const next = queue.flatMap(mutation => {
-        if (mutation.id !== mutationId) return [mutation];
-        if (resolution === 'keep-server') return [];
+    const next: OfflineMutation[] = [];
+    for (const mutation of queue) {
+        if (mutation.id !== mutationId) {
+            next.push(mutation);
+            continue;
+        }
+        if (resolution === 'keep-server') continue;
         const body = { ...mutation.body };
         delete body.base_updated_at;
         const [path, query] = mutation.path.split('?');
@@ -109,13 +113,13 @@ export async function resolveOfflineConflict(
             ?.split('&')
             .filter(part => !part.startsWith('base_updated_at='))
             .join('&');
-        return [{
+        next.push({
             ...mutation,
             path: retainedQuery ? `${path}?${retainedQuery}` : path,
             body,
             status: 'pending',
             conflictMessage: undefined,
-        }];
-    });
+        });
+    }
     await replaceOfflineMutations(userId, next);
 }

@@ -20,7 +20,7 @@ export interface Trip {
     membershipRole?: 'owner' | 'member';
 }
 
-interface ServerTrip {
+interface ServerTrip extends Record<string, unknown> {
     id: string;
     country: string;
     city: string;
