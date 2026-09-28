@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 
-from fastapi import Depends, FastAPI, HTTPException, Path, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -109,8 +109,16 @@ async def patch_trip(
 
 
 @app.delete("/suitcase/trips/{trip_id}")
-async def remove_trip(trip_id: str, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict[str, bool]:
-    ok = await delete_trip(db, trip_id, user["sub"])
+async def remove_trip(
+    trip_id: str,
+    base_updated_at: str | None = Query(default=None, max_length=64),
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, bool]:
+    try:
+        ok = await delete_trip(db, trip_id, user["sub"], base_updated_at)
+    except StaleWriteError:
+        raise HTTPException(status_code=HTTP_409_CONFLICT, detail="Данные изменились на другом устройстве")
     if not ok:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Поездка не найдена")
     return {"ok": True}
@@ -256,8 +264,16 @@ async def patch_expense(
 
 
 @app.delete("/suitcase/expenses/{expense_id}")
-async def remove_expense(expense_id: str, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict[str, bool]:
-    ok = await delete_expense(db, expense_id, user["sub"])
+async def remove_expense(
+    expense_id: str,
+    base_updated_at: str | None = Query(default=None, max_length=64),
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, bool]:
+    try:
+        ok = await delete_expense(db, expense_id, user["sub"], base_updated_at)
+    except StaleWriteError:
+        raise HTTPException(status_code=HTTP_409_CONFLICT, detail="Данные изменились на другом устройстве")
     if not ok:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Расход не найден")
     return {"ok": True}
@@ -293,8 +309,16 @@ async def patch_goal(
 
 
 @app.delete("/suitcase/goals/{goal_id}")
-async def remove_goal(goal_id: str, user=Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict[str, bool]:
-    ok = await delete_goal(db, goal_id, user["sub"])
+async def remove_goal(
+    goal_id: str,
+    base_updated_at: str | None = Query(default=None, max_length=64),
+    user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, bool]:
+    try:
+        ok = await delete_goal(db, goal_id, user["sub"], base_updated_at)
+    except StaleWriteError:
+        raise HTTPException(status_code=HTTP_409_CONFLICT, detail="Данные изменились на другом устройстве")
     if not ok:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Цель не найдена")
     return {"ok": True}

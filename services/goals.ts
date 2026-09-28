@@ -70,12 +70,17 @@ export async function updateGoal(id: string, goal: Partial<Omit<SuitcaseGoal, 'i
 }
 
 export async function deleteGoal(id: string): Promise<void> {
-    const path = `/suitcase/goals/${id}`;
+    const user = await getStoredUser();
+    const workspace = user ? await readWorkspaceSnapshot(user.id) : null;
+    const cached = workspace?.goals.find(goal => goal.id === id);
+    const baseUpdatedAt = typeof cached?.updated_at === 'string'
+        ? `?base_updated_at=${encodeURIComponent(cached.updated_at)}`
+        : '';
+    const path = `/suitcase/goals/${id}${baseUpdatedAt}`;
     try {
         await apiDelete(path);
     } catch (error) {
         if (!isNetworkError(error)) throw error;
-        const user = await getStoredUser();
         if (!user) throw error;
         await enqueueOfflineMutation(user.id, { id: createClientRequestId(), method: 'DELETE', path });
         await updateWorkspaceSnapshot(user.id, snapshot => ({

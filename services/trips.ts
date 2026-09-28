@@ -154,12 +154,17 @@ export const updateTrip = async (id: string, data: Partial<Trip>): Promise<void>
 };
 
 export const deleteTrip = async (id: string): Promise<void> => {
-    const path = `/suitcase/trips/${id}`;
+    const user = await getStoredUser();
+    const workspace = user ? await readWorkspaceSnapshot(user.id) : null;
+    const cached = workspace?.trips.find(trip => trip.id === id);
+    const baseUpdatedAt = typeof cached?.updated_at === 'string'
+        ? `?base_updated_at=${encodeURIComponent(cached.updated_at)}`
+        : '';
+    const path = `/suitcase/trips/${id}${baseUpdatedAt}`;
     try {
         await apiDelete(path);
     } catch (error) {
         if (!isNetworkError(error)) throw error;
-        const user = await getStoredUser();
         if (!user) throw error;
         await enqueueOfflineMutation(user.id, { id: createClientRequestId(), method: 'DELETE', path });
         await updateWorkspaceSnapshot(user.id, snapshot => ({

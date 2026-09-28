@@ -104,7 +104,18 @@ export async function resolveOfflineConflict(
         if (resolution === 'keep-server') return [];
         const body = { ...mutation.body };
         delete body.base_updated_at;
-        return [{ ...mutation, body, status: 'pending', conflictMessage: undefined }];
+        const [path, query] = mutation.path.split('?');
+        const retainedQuery = query
+            ?.split('&')
+            .filter(part => !part.startsWith('base_updated_at='))
+            .join('&');
+        return [{
+            ...mutation,
+            path: retainedQuery ? `${path}?${retainedQuery}` : path,
+            body,
+            status: 'pending',
+            conflictMessage: undefined,
+        }];
     });
     await replaceOfflineMutations(userId, next);
 }

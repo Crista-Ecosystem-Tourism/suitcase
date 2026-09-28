@@ -178,10 +178,17 @@ async def update_trip(db: AsyncSession, trip_id: str, user_id: str, data: dict[s
     return trip_out(trip)
 
 
-async def delete_trip(db: AsyncSession, trip_id: str, user_id: str) -> bool:
+async def delete_trip(
+    db: AsyncSession,
+    trip_id: str,
+    user_id: str,
+    expected_updated_at: str | None = None,
+) -> bool:
     trip = await get_trip_owned(db, trip_id, user_id)
     if not trip:
         return False
+    if expected_updated_at is not None and expected_updated_at != _iso(trip.updated_at):
+        raise StaleWriteError
     await db.execute(delete(SuitcaseTrip).where(SuitcaseTrip.id == trip_id))
     await db.commit()
     return True
@@ -242,12 +249,19 @@ async def update_expense(db: AsyncSession, expense_id: str, user_id: str, data: 
     return expense_out(expense)
 
 
-async def delete_expense(db: AsyncSession, expense_id: str, user_id: str) -> bool:
+async def delete_expense(
+    db: AsyncSession,
+    expense_id: str,
+    user_id: str,
+    expected_updated_at: str | None = None,
+) -> bool:
     expense = (await db.execute(select(SuitcaseExpense).where(SuitcaseExpense.id == expense_id))).scalar_one_or_none()
     if not expense:
         return False
     if not await get_trip_owned(db, expense.trip_id, user_id):
         return False
+    if expected_updated_at is not None and expected_updated_at != _iso(expense.updated_at):
+        raise StaleWriteError
     await db.execute(delete(SuitcaseExpense).where(SuitcaseExpense.id == expense_id))
     await db.commit()
     return True
@@ -299,10 +313,17 @@ async def update_goal(db: AsyncSession, goal_id: str, user_id: str, data: dict[s
     return goal_out(goal)
 
 
-async def delete_goal(db: AsyncSession, goal_id: str, user_id: str) -> bool:
+async def delete_goal(
+    db: AsyncSession,
+    goal_id: str,
+    user_id: str,
+    expected_updated_at: str | None = None,
+) -> bool:
     goal = (await db.execute(select(SuitcaseGoal).where(SuitcaseGoal.id == goal_id))).scalar_one_or_none()
     if not goal or goal.user_id != user_id:
         return False
+    if expected_updated_at is not None and expected_updated_at != _iso(goal.updated_at):
+        raise StaleWriteError
     await db.execute(delete(SuitcaseGoal).where(SuitcaseGoal.id == goal_id))
     await db.commit()
     return True
