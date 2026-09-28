@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlsplit, urlunsplit
 
 
 def get_database_url() -> str:
@@ -35,3 +35,12 @@ def get_cors_origins() -> list[str]:
             seen.add(value)
             origins.append(value)
     return origins
+
+
+def get_public_editorial_api_url() -> str:
+    """Return the fixed AI Agent public API origin used for published editorial pages."""
+    raw = (os.getenv("AI_AGENT_PUBLIC_API_URL") or "https://crista.online/api").strip()
+    parsed = urlsplit(raw)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+        raise ValueError("AI_AGENT_PUBLIC_API_URL must be an HTTPS URL without credentials")
+    return urlunsplit(("https", parsed.netloc, parsed.path.rstrip("/"), "", ""))

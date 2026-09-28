@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from typing import Literal
 from urllib.parse import urlsplit
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Path, Query, Request, Response
@@ -63,6 +64,8 @@ from app.services import (
 )
 from app.mini_sites import PublicMiniSiteQualityError, complete_trip, get_mini_site, publish_mini_site, read_public_mini_site, revoke_mini_site
 from app.mini_site_html import render_missing_mini_site_html, render_public_mini_site_html
+from app.editorial_html import render_missing_editorial_html, render_public_star_route_html, render_public_wiki_html
+from app.editorial_public import EditorialUnavailableError, fetch_published_star_route, fetch_published_wiki
 from app.push import send_push_to_users
 
 
@@ -342,6 +345,62 @@ async def get_public_mini_site_html(
         status_code=200,
         headers=headers,
     )
+
+
+def _editorial_headers() -> dict[str, str]:
+    return {
+        "Cache-Control": "public, max-age=300",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Content-Security-Policy": "default-src 'none'; img-src https:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    }
+
+
+def _editorial_canonical_url(request: Request, path: str) -> str | None:
+    host = request.headers.get("host", "").lower()
+    for origin in get_cors_origins():
+        parsed = urlsplit(origin)
+        if (
+            parsed.scheme in {"http", "https"}
+            and parsed.netloc.lower() == host
+            and parsed.path in {"", "/"}
+            and not parsed.username
+            and not parsed.password
+        ):
+            return f"{parsed.scheme}://{parsed.netloc}{path}"
+    return None
+
+
+@app.get("/w/{slug}", response_class=HTMLResponse)
+async def get_public_wiki_html(
+    request: Request,
+    slug: str = Path(min_length=2, max_length=80, pattern=r"^[a-z0-9-]+$"),
+    language: Literal["ru", "en"] = "ru",
+) -> HTMLResponse:
+    headers = _editorial_headers()
+    try:
+        article = await fetch_published_wiki(slug, language)
+    except EditorialUnavailableError:
+        raise HTTPException(status_code=503, detail="Редакционная страница временно недоступна")
+    if article is None:
+        return HTMLResponse(render_missing_editorial_html("wiki"), status_code=HTTP_404_NOT_FOUND, headers=headers)
+    path = f"/w/{slug}" + ("?language=en" if language == "en" else "")
+    return HTMLResponse(render_public_wiki_html(article, _editorial_canonical_url(request, path)), headers=headers)
+
+
+@app.get("/r/{route_id}", response_class=HTMLResponse)
+async def get_public_star_route_html(
+    request: Request,
+    route_id: str = Path(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$"),
+) -> HTMLResponse:
+    headers = _editorial_headers()
+    try:
+        route = await fetch_published_star_route(route_id)
+    except EditorialUnavailableError:
+        raise HTTPException(status_code=503, detail="Редакционная страница временно недоступна")
+    if route is None:
+        return HTMLResponse(render_missing_editorial_html("route"), status_code=HTTP_404_NOT_FOUND, headers=headers)
+    return HTMLResponse(render_public_star_route_html(route, _editorial_canonical_url(request, f"/r/{route_id}")), headers=headers)
 
 
 @app.post("/suitcase/trips/{trip_id}/expenses", response_model=SuitcaseExpenseOut)
