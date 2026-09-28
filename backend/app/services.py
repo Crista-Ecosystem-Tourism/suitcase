@@ -6,6 +6,7 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import SuitcaseExpense, SuitcaseGoal, SuitcaseTrip
@@ -119,9 +120,16 @@ async def workspace(db: AsyncSession, user_id: str) -> dict[str, Any]:
 
 
 async def create_trip(db: AsyncSession, user_id: str, data: dict[str, Any]) -> dict[str, Any]:
+    client_request_id = data.pop("client_request_id", None)
+    if client_request_id:
+        existing = await db.get(SuitcaseTrip, client_request_id)
+        if existing:
+            if existing.user_id != user_id:
+                raise ValueError("client request ID already belongs to another account")
+            return trip_out(existing)
     now = datetime.now(timezone.utc)
     trip = SuitcaseTrip(
-        id=uuid.uuid4().hex,
+        id=client_request_id or uuid.uuid4().hex,
         user_id=user_id,
         country=data["country"],
         city=data["city"],
@@ -137,7 +145,16 @@ async def create_trip(db: AsyncSession, user_id: str, data: dict[str, Any]) -> d
         updated_at=now,
     )
     db.add(trip)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        if not client_request_id:
+            raise
+        existing = await db.get(SuitcaseTrip, client_request_id)
+        if existing and existing.user_id == user_id:
+            return trip_out(existing)
+        raise ValueError("client request ID already belongs to another account")
     await db.refresh(trip)
     return trip_out(trip)
 
@@ -166,9 +183,16 @@ async def delete_trip(db: AsyncSession, trip_id: str, user_id: str) -> bool:
 async def create_expense(db: AsyncSession, user_id: str, trip_id: str, data: dict[str, Any]) -> dict[str, Any] | None:
     if not await get_trip_owned(db, trip_id, user_id):
         return None
+    client_request_id = data.pop("client_request_id", None)
+    if client_request_id:
+        existing = await db.get(SuitcaseExpense, client_request_id)
+        if existing:
+            if existing.trip_id != trip_id:
+                raise ValueError("client request ID already belongs to another expense")
+            return expense_out(existing)
     now = datetime.now(timezone.utc)
     expense = SuitcaseExpense(
-        id=uuid.uuid4().hex,
+        id=client_request_id or uuid.uuid4().hex,
         trip_id=trip_id,
         amount=float(data["amount"]),
         category=data["category"],
@@ -179,7 +203,16 @@ async def create_expense(db: AsyncSession, user_id: str, trip_id: str, data: dic
         updated_at=now,
     )
     db.add(expense)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        if not client_request_id:
+            raise
+        existing = await db.get(SuitcaseExpense, client_request_id)
+        if existing and existing.trip_id == trip_id:
+            return expense_out(existing)
+        raise ValueError("client request ID already belongs to another expense")
     await db.refresh(expense)
     return expense_out(expense)
 
@@ -211,10 +244,32 @@ async def delete_expense(db: AsyncSession, expense_id: str, user_id: str) -> boo
 
 
 async def create_goal(db: AsyncSession, user_id: str, data: dict[str, Any]) -> dict[str, Any]:
+    client_request_id = data.pop("client_request_id", None)
+    if client_request_id:
+        existing = await db.get(SuitcaseGoal, client_request_id)
+        if existing:
+            if existing.user_id != user_id:
+                raise ValueError("client request ID already belongs to another account")
+            return goal_out(existing)
     now = datetime.now(timezone.utc)
-    goal = SuitcaseGoal(id=uuid.uuid4().hex, user_id=user_id, created_at=now, updated_at=now, **data)
+    goal = SuitcaseGoal(
+        id=client_request_id or uuid.uuid4().hex,
+        user_id=user_id,
+        created_at=now,
+        updated_at=now,
+        **data,
+    )
     db.add(goal)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        if not client_request_id:
+            raise
+        existing = await db.get(SuitcaseGoal, client_request_id)
+        if existing and existing.user_id == user_id:
+            return goal_out(existing)
+        raise ValueError("client request ID already belongs to another account")
     await db.refresh(goal)
     return goal_out(goal)
 

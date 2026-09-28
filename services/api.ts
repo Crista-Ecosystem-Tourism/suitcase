@@ -1,6 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ApiBaseUrl, IdentityApiBaseUrl } from '../constants/Config';
 import { resolveApiUrl } from './apiRouting.js';
+import {
+    readOfflineMutations,
+    readWorkspaceSnapshot,
+    replaceOfflineMutations,
+    writeWorkspaceSnapshot,
+    type WorkspaceSnapshot,
+} from './offline';
 
 const TOKEN_KEY = 'crista_token';
 const USER_KEY = 'crista_user';
@@ -104,16 +111,55 @@ async function parse<T>(response: Response): Promise<T> {
     return (await response.json()) as T;
 }
 
+async function syncOfflineMutations(): Promise<void> {
+    const user = await getStoredUser();
+    if (!user) return;
+    const queue = await readOfflineMutations(user.id);
+    if (!queue.length) return;
+
+    const remaining = [...queue];
+    while (remaining.length) {
+        const mutation = remaining[0];
+        let response: Response;
+        try {
+            response = await fetch(requestUrl(mutation.path), {
+                method: mutation.method,
+                headers: await buildHeaders(mutation.body ? { 'Content-Type': 'application/json' } : undefined),
+                body: mutation.body ? JSON.stringify(mutation.body) : undefined,
+            });
+        } catch {
+            break;
+        }
+        if (!response.ok && !(mutation.method === 'DELETE' && response.status === 404)) break;
+        remaining.shift();
+        await replaceOfflineMutations(user.id, remaining);
+    }
+}
+
 function requestUrl(path: string): string {
     return resolveApiUrl(path, ApiBaseUrl, IdentityApiBaseUrl);
 }
 
 export async function apiGet<T>(path: string, tokenOverride?: string): Promise<T> {
-    const r = await fetch(requestUrl(path), {
-        method: 'GET',
-        headers: await buildHeaders(undefined, tokenOverride),
-    });
-    return parse<T>(r);
+    if (path === '/suitcase/workspace' && !tokenOverride) await syncOfflineMutations();
+    try {
+        const r = await fetch(requestUrl(path), {
+            method: 'GET',
+            headers: await buildHeaders(undefined, tokenOverride),
+        });
+        const data = await parse<T>(r);
+        if (path === '/suitcase/workspace' && !tokenOverride) {
+            const user = await getStoredUser();
+            if (user) await writeWorkspaceSnapshot(user.id, data as WorkspaceSnapshot);
+        }
+        return data;
+    } catch (error) {
+        if (path !== '/suitcase/workspace' || tokenOverride || !(error instanceof TypeError)) throw error;
+        const user = await getStoredUser();
+        const snapshot = user ? await readWorkspaceSnapshot(user.id) : null;
+        if (!snapshot) throw error;
+        return snapshot as T;
+    }
 }
 
 export async function apiPost<T>(path: string, body?: unknown): Promise<T> {

@@ -1,4 +1,13 @@
 import { apiDelete, apiGet, apiPatch, apiPost } from './api';
+import { getStoredUser } from './api';
+import {
+    createClientRequestId,
+    enqueueOfflineMutation,
+    isNetworkError,
+    readWorkspaceSnapshot,
+    updateWorkspaceSnapshot,
+    writeWorkspaceSnapshot,
+} from './offline';
 
 export interface SuitcaseGoal {
     id: string;
@@ -14,13 +23,54 @@ export async function getGoals(): Promise<SuitcaseGoal[]> {
 }
 
 export async function createGoal(goal: Omit<SuitcaseGoal, 'id'>): Promise<SuitcaseGoal> {
-    return apiPost<SuitcaseGoal>('/suitcase/goals', goal);
+    const clientRequestId = createClientRequestId();
+    const body = { ...goal, client_request_id: clientRequestId };
+    try {
+        return await apiPost<SuitcaseGoal>('/suitcase/goals', body);
+    } catch (error) {
+        if (!isNetworkError(error)) throw error;
+        const user = await getStoredUser();
+        if (!user) throw error;
+        const pendingGoal: SuitcaseGoal = { ...goal, id: clientRequestId };
+        await enqueueOfflineMutation(user.id, { id: clientRequestId, method: 'POST', path: '/suitcase/goals', body });
+        await updateWorkspaceSnapshot(user.id, snapshot => ({ ...snapshot, goals: [...snapshot.goals, pendingGoal] }));
+        return pendingGoal;
+    }
 }
 
 export async function updateGoal(id: string, goal: Partial<Omit<SuitcaseGoal, 'id'>>): Promise<SuitcaseGoal> {
-    return apiPatch<SuitcaseGoal>(`/suitcase/goals/${id}`, goal);
+    const path = `/suitcase/goals/${id}`;
+    try {
+        return await apiPatch<SuitcaseGoal>(path, goal);
+    } catch (error) {
+        if (!isNetworkError(error)) throw error;
+        const user = await getStoredUser();
+        if (!user) throw error;
+        const workspace = await readWorkspaceSnapshot(user.id);
+        const current = workspace?.goals.find(item => item.id === id) as SuitcaseGoal | undefined;
+        if (!workspace || !current) throw error;
+        await enqueueOfflineMutation(user.id, { id: createClientRequestId(), method: 'PATCH', path, body: goal });
+        const updated: SuitcaseGoal = { ...current, ...goal };
+        await writeWorkspaceSnapshot(user.id, {
+            ...workspace,
+            goals: workspace.goals.map(item => item.id === id ? updated : item),
+        });
+        return updated;
+    }
 }
 
 export async function deleteGoal(id: string): Promise<void> {
-    await apiDelete(`/suitcase/goals/${id}`);
+    const path = `/suitcase/goals/${id}`;
+    try {
+        await apiDelete(path);
+    } catch (error) {
+        if (!isNetworkError(error)) throw error;
+        const user = await getStoredUser();
+        if (!user) throw error;
+        await enqueueOfflineMutation(user.id, { id: createClientRequestId(), method: 'DELETE', path });
+        await updateWorkspaceSnapshot(user.id, snapshot => ({
+            ...snapshot,
+            goals: snapshot.goals.filter(goal => goal.id !== id),
+        }));
+    }
 }

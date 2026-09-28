@@ -1,4 +1,6 @@
 import { apiDelete, apiGet, apiPatch, apiPost } from './api';
+import { getStoredUser } from './api';
+import { createClientRequestId, enqueueOfflineMutation, isNetworkError, updateWorkspaceSnapshot } from './offline';
 
 export interface Expense {
     id?: string;
@@ -53,11 +55,29 @@ function toServerPatch(e: Partial<Expense>): Record<string, unknown> {
 }
 
 export const addExpense = async (expenseData: Omit<Expense, 'id'>): Promise<string> => {
-    const created = await apiPost<ServerExpense>(
-        `/suitcase/trips/${expenseData.trip_id}/expenses`,
-        toServerCreate(expenseData)
-    );
-    return created.id;
+    const clientRequestId = createClientRequestId();
+    const body = { ...toServerCreate(expenseData), client_request_id: clientRequestId };
+    const path = `/suitcase/trips/${expenseData.trip_id}/expenses`;
+    try {
+        const created = await apiPost<ServerExpense>(path, body);
+        return created.id;
+    } catch (error) {
+        if (!isNetworkError(error)) throw error;
+        const user = await getStoredUser();
+        if (!user) throw error;
+        await enqueueOfflineMutation(user.id, { id: clientRequestId, method: 'POST', path, body });
+        await updateWorkspaceSnapshot(user.id, snapshot => ({
+            ...snapshot,
+            expenses: [...snapshot.expenses, {
+                id: clientRequestId,
+                trip_id: expenseData.trip_id,
+                ...toServerCreate(expenseData),
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+            }],
+        }));
+        return clientRequestId;
+    }
 };
 
 export const getExpensesByTrip = async (tripId: string): Promise<Expense[]> => {
@@ -72,9 +92,34 @@ export const getExpenseById = async (id: string): Promise<Expense | null> => {
 };
 
 export const updateExpense = async (id: string, data: Partial<Expense>): Promise<void> => {
-    await apiPatch<ServerExpense>(`/suitcase/expenses/${id}`, toServerPatch(data));
+    const body = toServerPatch(data);
+    const path = `/suitcase/expenses/${id}`;
+    try {
+        await apiPatch<ServerExpense>(path, body);
+    } catch (error) {
+        if (!isNetworkError(error)) throw error;
+        const user = await getStoredUser();
+        if (!user) throw error;
+        await enqueueOfflineMutation(user.id, { id: createClientRequestId(), method: 'PATCH', path, body });
+        await updateWorkspaceSnapshot(user.id, snapshot => ({
+            ...snapshot,
+            expenses: snapshot.expenses.map(expense => expense.id === id ? { ...expense, ...body, updated_at: new Date().toISOString() } : expense),
+        }));
+    }
 };
 
 export const deleteExpense = async (id: string): Promise<void> => {
-    await apiDelete(`/suitcase/expenses/${id}`);
+    const path = `/suitcase/expenses/${id}`;
+    try {
+        await apiDelete(path);
+    } catch (error) {
+        if (!isNetworkError(error)) throw error;
+        const user = await getStoredUser();
+        if (!user) throw error;
+        await enqueueOfflineMutation(user.id, { id: createClientRequestId(), method: 'DELETE', path });
+        await updateWorkspaceSnapshot(user.id, snapshot => ({
+            ...snapshot,
+            expenses: snapshot.expenses.filter(expense => expense.id !== id),
+        }));
+    }
 };

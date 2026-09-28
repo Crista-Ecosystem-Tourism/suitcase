@@ -1,4 +1,6 @@
 import { apiDelete, apiGet, apiPatch, apiPost } from './api';
+import { createClientRequestId, enqueueOfflineMutation, isNetworkError, updateWorkspaceSnapshot } from './offline';
+import { getStoredUser } from './api';
 
 export interface Trip {
     id?: string;
@@ -79,8 +81,36 @@ function toServerPatch(t: Partial<Trip>): Record<string, unknown> {
 }
 
 export const addTrip = async (tripData: Omit<Trip, 'id' | 'createdAt'>): Promise<string> => {
-    const created = await apiPost<ServerTrip>('/suitcase/trips', toServerCreate(tripData));
-    return created.id;
+    const clientRequestId = createClientRequestId();
+    const body = { ...toServerCreate(tripData), client_request_id: clientRequestId };
+    try {
+        const created = await apiPost<ServerTrip>('/suitcase/trips', body);
+        return created.id;
+    } catch (error) {
+        if (!isNetworkError(error)) throw error;
+        const user = await getStoredUser();
+        if (!user) throw error;
+        await enqueueOfflineMutation(user.id, { id: clientRequestId, method: 'POST', path: '/suitcase/trips', body });
+        await updateWorkspaceSnapshot(user.id, snapshot => ({
+            ...snapshot,
+            trips: [{
+                id: clientRequestId,
+                country: tripData.country,
+                city: tripData.city,
+                start_date: tripData.startDate,
+                end_date: tripData.endDate,
+                image: tripData.image ?? null,
+                mood: tripData.mood ?? null,
+                route_json: tripData.route_json ?? null,
+                impressions: tripData.impressions ?? null,
+                photos: tripData.photos ?? null,
+                is_archived: tripData.isArchived ?? false,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+            }, ...snapshot.trips],
+        }));
+        return clientRequestId;
+    }
 };
 
 export const getTrips = async (): Promise<Trip[]> => {
@@ -97,9 +127,35 @@ export const getTripById = async (id: string): Promise<Trip | null> => {
 };
 
 export const updateTrip = async (id: string, data: Partial<Trip>): Promise<void> => {
-    await apiPatch<ServerTrip>(`/suitcase/trips/${id}`, toServerPatch(data));
+    const body = toServerPatch(data);
+    const path = `/suitcase/trips/${id}`;
+    try {
+        await apiPatch<ServerTrip>(path, body);
+    } catch (error) {
+        if (!isNetworkError(error)) throw error;
+        const user = await getStoredUser();
+        if (!user) throw error;
+        await enqueueOfflineMutation(user.id, { id: createClientRequestId(), method: 'PATCH', path, body });
+        await updateWorkspaceSnapshot(user.id, snapshot => ({
+            ...snapshot,
+            trips: snapshot.trips.map(trip => trip.id === id ? { ...trip, ...body, updated_at: new Date().toISOString() } : trip),
+        }));
+    }
 };
 
 export const deleteTrip = async (id: string): Promise<void> => {
-    await apiDelete(`/suitcase/trips/${id}`);
+    const path = `/suitcase/trips/${id}`;
+    try {
+        await apiDelete(path);
+    } catch (error) {
+        if (!isNetworkError(error)) throw error;
+        const user = await getStoredUser();
+        if (!user) throw error;
+        await enqueueOfflineMutation(user.id, { id: createClientRequestId(), method: 'DELETE', path });
+        await updateWorkspaceSnapshot(user.id, snapshot => ({
+            trips: snapshot.trips.filter(trip => trip.id !== id),
+            expenses: snapshot.expenses.filter(expense => expense.trip_id !== id),
+            goals: snapshot.goals,
+        }));
+    }
 };

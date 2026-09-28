@@ -84,7 +84,10 @@ async def post_trip(
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SuitcaseTripOut:
-    row = await create_trip(db, user["sub"], payload.model_dump(exclude_unset=True))
+    try:
+        row = await create_trip(db, user["sub"], payload.model_dump(exclude_unset=True))
+    except ValueError:
+        raise HTTPException(status_code=HTTP_409_CONFLICT, detail="Идентификатор операции уже занят")
     return SuitcaseTripOut(**row)
 
 
@@ -223,7 +226,10 @@ async def post_expense(
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SuitcaseExpenseOut:
-    row = await create_expense(db, user["sub"], trip_id, payload.model_dump(exclude_unset=True))
+    try:
+        row = await create_expense(db, user["sub"], trip_id, payload.model_dump(exclude_unset=True))
+    except ValueError:
+        raise HTTPException(status_code=HTTP_409_CONFLICT, detail="Идентификатор операции уже занят")
     if not row:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Поездка не найдена")
     return SuitcaseExpenseOut(**row)
@@ -256,7 +262,10 @@ async def post_goal(
     user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SuitcaseGoalOut:
-    row = await create_goal(db, user["sub"], payload.model_dump(exclude_unset=True))
+    try:
+        row = await create_goal(db, user["sub"], payload.model_dump(exclude_unset=True))
+    except ValueError:
+        raise HTTPException(status_code=HTTP_409_CONFLICT, detail="Идентификатор операции уже занят")
     return SuitcaseGoalOut(**row)
 
 

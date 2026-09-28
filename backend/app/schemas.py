@@ -5,7 +5,11 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 
-class SuitcaseTripCreate(BaseModel):
+class ClientRequestBody(BaseModel):
+    client_request_id: Optional[str] = Field(default=None, min_length=16, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+
+
+class SuitcaseTripCreate(ClientRequestBody):
     country: str
     city: str
     start_date: str
@@ -31,14 +35,25 @@ class SuitcaseTripPatch(BaseModel):
     is_archived: Optional[bool] = None
 
 
-class SuitcaseTripOut(SuitcaseTripCreate):
+class SuitcaseTripOut(BaseModel):
     id: str
+    country: str
+    city: str
+    start_date: str
+    end_date: str
+    image: Optional[str] = None
+    mood: Optional[str] = None
+    route_json: Optional[str] = None
+    impressions: Optional[str] = None
+    photos: Optional[list] = None
+    is_archived: bool = False
     completed_at: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
 
-class SuitcaseExpenseCreate(BaseModel):
+class SuitcaseExpenseCreate(ClientRequestBody):
+    client_request_id: Optional[str] = Field(default=None, min_length=16, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
     amount: float
     category: str
     title: str
@@ -54,14 +69,20 @@ class SuitcaseExpensePatch(BaseModel):
     currency: Optional[str] = None
 
 
-class SuitcaseExpenseOut(SuitcaseExpenseCreate):
+class SuitcaseExpenseOut(BaseModel):
     id: str
     trip_id: str
+    amount: float
+    category: str
+    title: str
+    date: str
+    currency: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
 
-class SuitcaseGoalCreate(BaseModel):
+class SuitcaseGoalCreate(ClientRequestBody):
+    client_request_id: Optional[str] = Field(default=None, min_length=16, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
     title: str
     current: int = 0
     total: int = 1
@@ -75,8 +96,12 @@ class SuitcaseGoalPatch(BaseModel):
     color: Optional[str] = None
 
 
-class SuitcaseGoalOut(SuitcaseGoalCreate):
+class SuitcaseGoalOut(BaseModel):
     id: str
+    title: str
+    current: int = 0
+    total: int = 1
+    color: str = "#007AFF"
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
