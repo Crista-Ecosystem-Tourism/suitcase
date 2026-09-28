@@ -87,6 +87,12 @@ export default function ProfileScreen() {
                 <View style={styles.section}>
                     <Text style={[styles.sectionTitle, { color: colors.secondaryText }]}>{t.profile.travelData}</Text>
                     <View style={[styles.card, { backgroundColor: colors.card }]}>
+                        <TouchableOpacity accessibilityRole="button" style={styles.menuItem} onPress={() => router.push('/invite')}>
+                            <Ionicons name="people-outline" size={22} color={colors.primary} />
+                            <Text style={[styles.menuText, { color: colors.text }]}>Присоединиться к поездке</Text>
+                            <Ionicons name="chevron-forward" size={18} color={colors.border} />
+                        </TouchableOpacity>
+                        <View style={[styles.divider, { backgroundColor: colors.border }]} />
                         <TouchableOpacity
                             accessibilityRole="button"
                             style={styles.menuItem}

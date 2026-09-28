@@ -53,6 +53,7 @@ function NavigationContent() {
             <Stack.Screen name="trip/edit/[id]" options={{ title: 'Edit Trip' }} />
             <Stack.Screen name="expense/add" options={{ title: 'Add Expense' }} />
             <Stack.Screen name="expense/edit/[id]" options={{ title: 'Edit Expense' }} />
+            <Stack.Screen name="invite" options={{ title: 'Приглашение в поездку' }} />
         </Stack>
     );
 }

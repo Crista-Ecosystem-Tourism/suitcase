@@ -17,6 +17,7 @@ import { getTripById, deleteTrip, Trip, updateTrip } from '../../services/trips'
 import { fetchExchangeRates, convertCurrency, getCurrencySymbol } from '../../services/currencies';
 import * as ImagePicker from 'expo-image-picker';
 import { getExpensesByTrip, Expense } from '../../services/expenses';
+import { createTripInvite } from '../../services/tripGroup';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -178,6 +179,16 @@ export default function TripDetailScreen() {
         }
     };
 
+    const handleInvite = async () => {
+        if (!id) return;
+        try {
+            const invite = await createTripInvite(id);
+            Alert.alert('Код приглашения', `Отправьте участнику этот одноразовый код:\n\n${invite.invite_code}\n\nДействует до ${new Date(invite.expires_at).toLocaleString(language === 'ru' ? 'ru-RU' : 'en-US')}.`);
+        } catch (error) {
+            Alert.alert(t.alerts.error, error instanceof Error ? error.message : t.alerts.updateError);
+        }
+    };
+
     const totalSpent = useMemo(() => {
         return expenses.reduce((sum, exp) => {
             const amountInRub = convertCurrency(exp.amount, exp.currency || 'RUB', 'RUB', rates);
@@ -258,6 +269,9 @@ export default function TripDetailScreen() {
 
                     {canManageTrip && (
                         <View style={styles.headerActions}>
+                            <TouchableOpacity onPress={() => void handleInvite()} style={[styles.headerBtn, { backgroundColor: colors.card }]}>
+                                <Ionicons name="person-add-outline" size={20} color={colors.primary} />
+                            </TouchableOpacity>
                             <TouchableOpacity onPress={handleArchive} style={[styles.headerBtn, { backgroundColor: colors.card }]}>
                                 <Ionicons name={trip.isArchived ? "archive" : "archive-outline"} size={20} color={colors.primary} />
                             </TouchableOpacity>
