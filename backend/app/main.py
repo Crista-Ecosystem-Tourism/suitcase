@@ -56,7 +56,7 @@ from app.services import (
     InvalidExpenseSplitError,
     InvalidSettlementError,
 )
-from app.mini_sites import complete_trip, get_mini_site, publish_mini_site, read_public_mini_site, revoke_mini_site
+from app.mini_sites import PublicMiniSiteQualityError, complete_trip, get_mini_site, publish_mini_site, read_public_mini_site, revoke_mini_site
 from app.mini_site_html import render_missing_mini_site_html, render_public_mini_site_html
 
 
@@ -255,6 +255,8 @@ async def post_trip_mini_site(
         publication = await publish_mini_site(
             db, trip_id, user["sub"], payload.visibility, payload.game_stamp_ticket,
         )
+    except PublicMiniSiteQualityError as error:
+        raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(error))
     except ValueError:
         raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail="Игровые штампы не прошли проверку")
     if publication is None:

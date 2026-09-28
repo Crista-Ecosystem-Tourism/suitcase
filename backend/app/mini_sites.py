@@ -15,6 +15,23 @@ from app.models import SuitcaseTrip, SuitcaseTripPublication
 CONSENT_VERSION = "trip-mini-site-v2-game-stamps"
 
 
+class PublicMiniSiteQualityError(ValueError):
+    pass
+
+
+def _require_public_quality(trip: SuitcaseTrip, snapshot: dict[str, Any]) -> None:
+    """Keep indexable pages to completed trips with useful, owner-reviewed content."""
+    if trip.completed_at is None:
+        raise PublicMiniSiteQualityError("Завершите поездку перед публичной публикацией")
+    summary = snapshot.get("summary")
+    if not isinstance(summary, str) or len(summary.strip()) < 80:
+        raise PublicMiniSiteQualityError("Для публичной страницы добавьте описание поездки не короче 80 символов")
+    points = snapshot.get("points")
+    named_points = [point for point in points if isinstance(point, dict) and isinstance(point.get("name"), str) and point["name"].strip()] if isinstance(points, list) else []
+    if len(named_points) < 2:
+        raise PublicMiniSiteQualityError("Для публичной страницы добавьте минимум две подписанные точки маршрута")
+
+
 def _owner_payload(
     publication: SuitcaseTripPublication | None, trip: SuitcaseTrip,
     preview_snapshot: dict[str, Any] | None = None,
@@ -135,6 +152,9 @@ async def publish_mini_site(
         SuitcaseTripPublication.trip_id == trip_id,
     ).with_for_update())
     now = datetime.now(timezone.utc)
+    snapshot = build_trip_snapshot(trip, game_stamps)
+    if visibility == "public":
+        _require_public_quality(trip, snapshot)
     if publication is None:
         publication = SuitcaseTripPublication(
             id=uuid.uuid4().hex,
@@ -142,7 +162,7 @@ async def publish_mini_site(
             slug=secrets.token_urlsafe(24),
             visibility=visibility,
             consent_version=CONSENT_VERSION,
-            snapshot=build_trip_snapshot(trip, game_stamps),
+            snapshot=snapshot,
             consented_at=now,
             created_at=now,
             updated_at=now,
@@ -152,7 +172,7 @@ async def publish_mini_site(
         publication.slug = secrets.token_urlsafe(24)
         publication.visibility = visibility
         publication.consent_version = CONSENT_VERSION
-        publication.snapshot = build_trip_snapshot(trip, game_stamps)
+        publication.snapshot = snapshot
         publication.consented_at = now
         publication.revoked_at = None
         publication.updated_at = now
