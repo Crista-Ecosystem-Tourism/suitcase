@@ -678,6 +678,8 @@ async def create_goal(db: AsyncSession, user_id: str, data: dict[str, Any]) -> d
             if existing.user_id != user_id:
                 raise ValueError("client request ID already belongs to another account")
             return goal_out(existing)
+    # Defaults are seeded lazily; seed them before the first custom goal so they are never skipped.
+    await ensure_default_goals(db, user_id)
     now = datetime.now(timezone.utc)
     goal = SuitcaseGoal(
         id=client_request_id or uuid.uuid4().hex,
