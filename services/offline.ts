@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { mergeOfflineMutation, resolveConflictInQueue } from './offlineQueue.js';
 
 export interface WorkspaceSnapshot {
     trips: Record<string, unknown>[];
@@ -60,17 +61,7 @@ export async function enqueueOfflineMutation(userId: string, mutation: OfflineMu
     try {
         const raw = await AsyncStorage.getItem(queueKey(userId));
         const queue = raw ? JSON.parse(raw) as OfflineMutation[] : [];
-        const existingPatch = mutation.method === 'PATCH'
-            ? queue.find(item => item.method === 'PATCH' && item.path === mutation.path && item.status !== 'conflict')
-            : undefined;
-        if (existingPatch) {
-            const baseUpdatedAt = existingPatch.body?.base_updated_at;
-            existingPatch.body = { ...existingPatch.body, ...mutation.body };
-            if (baseUpdatedAt !== undefined) existingPatch.body.base_updated_at = baseUpdatedAt;
-        } else if (!queue.some(item => item.id === mutation.id)) {
-            queue.push(mutation);
-        }
-        await AsyncStorage.setItem(queueKey(userId), JSON.stringify(queue));
+        await AsyncStorage.setItem(queueKey(userId), JSON.stringify(mergeOfflineMutation(queue, mutation)));
     } catch {
         throw new Error('Не удалось сохранить действие для синхронизации');
     }
@@ -99,27 +90,5 @@ export async function resolveOfflineConflict(
     resolution: 'keep-local' | 'keep-server',
 ): Promise<void> {
     const queue = await readOfflineMutations(userId);
-    const next: OfflineMutation[] = [];
-    for (const mutation of queue) {
-        if (mutation.id !== mutationId) {
-            next.push(mutation);
-            continue;
-        }
-        if (resolution === 'keep-server') continue;
-        const body = { ...mutation.body };
-        delete body.base_updated_at;
-        const [path, query] = mutation.path.split('?');
-        const retainedQuery = query
-            ?.split('&')
-            .filter(part => !part.startsWith('base_updated_at='))
-            .join('&');
-        next.push({
-            ...mutation,
-            path: retainedQuery ? `${path}?${retainedQuery}` : path,
-            body,
-            status: 'pending',
-            conflictMessage: undefined,
-        });
-    }
-    await replaceOfflineMutations(userId, next);
+    await replaceOfflineMutations(userId, resolveConflictInQueue(queue, mutationId, resolution));
 }
